@@ -213,7 +213,7 @@ function buyBus(){
   const sel = el('buy-bus-type').value;
   const model = BUS_MODELS.find(m=>m.id===sel);
   if(!model) return;
-  const cost = model.price * 1000; // treat model price as thousands
+  const cost = model.price; // use the listed price directly (price is in £)
   if(state.balance < cost){ alert('Not enough funds'); return; }
   state.balance -= cost;
   state.balance -= MANAGEMENT_ACTION_COST;
