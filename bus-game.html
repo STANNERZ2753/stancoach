@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>Bus Company Prototype</title>
+<title>Bus Company — Prototype</title>
 <style>
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:16px;color:#111}
   h1,h2{margin:.2rem 0}
@@ -144,7 +144,7 @@ function updateUI(){
   buySel.innerHTML = '';
   BUS_MODELS.forEach(m=> {
     const opt = document.createElement('option');
-    opt.value = m.id; opt.textContent = m.label;
+    opt.value = m.id; opt.textContent = `${m.label} — £${m.price}`;
     buySel.appendChild(opt);
   });
 
@@ -186,15 +186,16 @@ function buyBus(){
   const sel = el('buy-bus-type').value;
   const model = BUS_MODELS.find(m=>m.id===sel);
   if(!model) return;
-  const cost = model.price * 1000; // convert to full £ (prices were small numbers: treat them as thousands)
-  if(state.balance < cost){ alert('Not enough funds'); return; }
-  // management cost
+  const cost = model.price; // use the listed price directly (price is in £)
+  const total = cost + MANAGEMENT_ACTION_COST;
+  if(!confirm(`Buy ${model.label} for £${cost}? Management fee £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return;
+  if(state.balance < total){ alert('Not enough funds'); return; }
   state.balance -= cost;
   state.balance -= MANAGEMENT_ACTION_COST;
   const id = 'bus' + Date.now();
   const name = `${model.id}-${state.buses.length+1}`;
   state.buses.push({id, modelId:model.id, type:model.type, name});
-  addLog(`Bought bus ${name} for ${money(cost)} (model price £${model.price})`);
+  addLog(`Bought bus ${name} for ${money(cost)} (management £${MANAGEMENT_ACTION_COST}).`);
   updateUI();
 }
 
@@ -256,77 +257,36 @@ function simulateDay(){
   // per-route costs & earnings
   state.routes.forEach(route => {
     if(!route.assignedBusId){
-      route.lastPassengers = 0;
+      route.lastPassengers=0;
       // still cost: maintenance per route and fuel per route
       costs += MAINTENANCE_PER_ROUTE + FUEL_COST_PER_ROUTE;
       return;
     }
     // simulate number of runs per day: 24h*60/freq
-    const runs = Math.max(1, Math.floor(24*60 / Math.max(1, route.freq)));
-    let passengersTotal = 0;
+    const runs=Math.max(1,Math.floor(24*60/Math.max(1,route.freq)));
+    let passengersTotal=0;
     for(let i=0;i<runs;i++){
-      // passenger variability: between 50% and 130% of expected
-      const passengers = Math.max(0, Math.round(route.expected * (0.5 + Math.random()*0.8)));
-      passengersTotal += passengers;
-      income += passengers * ROUTE_EARNING_PER_PASSENGER;
-      // route completion bonus per run
-      income += ROUTE_COMPLETION_BONUS;
-      // on-time chance: 80% get on-time bonus per run
-      if(Math.random() < 0.8) income += ON_TIME_BONUS;
-      costs += FUEL_COST_PER_ROUTE + MAINTENANCE_PER_ROUTE;
+      const passengers=Math.max(0,Math.round(route.expected*(0.5+Math.random()*0.8)));
+      passengersTotal+=passengers;
+      income+=passengers*ROUTE_EARNING_PER_PASSENGER;
+      income+=ROUTE_COMPLETION_BONUS;
+      if(Math.random()<0.8) income+=ON_TIME_BONUS;
+      costs+=FUEL_COST_PER_ROUTE+MAINTENANCE_PER_ROUTE;
     }
-    route.lastPassengers = passengersTotal;
+    route.lastPassengers=passengersTotal;
   });
 
-  // random damage event (per day company-level)
-  const r = Math.random();
-  if(r < 0.01){
-    costs += DAMAGE_MAJOR;
-    addLog(`Major damage today: ${money(DAMAGE_MAJOR)}.`);
-  } else if(r < 0.04){
-    costs += DAMAGE_MEDIUM;
-    addLog(`Medium damage today: ${money(DAMAGE_MEDIUM)}.`);
-  } else if(r < 0.12){
-    costs += DAMAGE_MINOR;
-    addLog(`Minor damage today: ${money(DAMAGE_MINOR)}.`);
-  }
+  const r=Math.random();
+  if(r<0.01){costs+=DAMAGE_MAJOR;addLog(`Major damage today: ${money(DAMAGE_MAJOR)}.`);}else if(r<0.04){costs+=DAMAGE_MEDIUM;addLog(`Medium damage today: ${money(DAMAGE_MEDIUM)}.`);}else if(r<0.12){costs+=DAMAGE_MINOR;addLog(`Minor damage today: ${money(DAMAGE_MINOR)}.`);} 
 
-  // weekly maintenance if day divisible by 7
-  if(state.day % 7 === 0){
-    costs += WEEKLY_MAINTENANCE;
-    addLog(`Weekly maintenance charged: ${money(WEEKLY_MAINTENANCE)}.`);
-  }
+  if(state.day%7===0){costs+=WEEKLY_MAINTENANCE;addLog(`Weekly maintenance charged: ${money(WEEKLY_MAINTENANCE)}.`);} 
 
-  // add/subtract to balance
-  state.balance += income;
-  state.balance -= costs;
-
-  addLog(`Day ${state.day} results: Income ${money(Math.round(income))}, Costs ${money(Math.round(costs))}, Net ${money(Math.round(income - costs))}. Balance now ${money(Math.round(state.balance))}.`);
-  state.day += 1;
-
-  updateUI();
+  state.balance+=income;state.balance-=costs;addLog(`Day ${state.day} results: Income ${money(Math.round(income))}, Costs ${money(Math.round(costs))}, Net ${money(Math.round(income-costs))}. Balance now ${money(Math.round(state.balance))}.`);state.day+=1;updateUI();
 }
 
-/* === Events and bindings === */
-document.getElementById('buy-bus').addEventListener('click', buyBus);
-document.getElementById('hire-driver').addEventListener('click', hireDriver);
-document.getElementById('unlock-route').addEventListener('click', unlockRoute);
-document.getElementById('buy-parking').addEventListener('click', buyParking);
-document.getElementById('add-route').addEventListener('click', addRoute);
-document.getElementById('advance-day').addEventListener('click', simulateDay);
-document.getElementById('advance-week').addEventListener('click', ()=>{ for(let i=0;i<7;i++) simulateDay(); });
+document.getElementById('buy-bus').addEventListener('click',buyBus);document.getElementById('hire-driver').addEventListener('click',hireDriver);document.getElementById('unlock-route').addEventListener('click',unlockRoute);document.getElementById('buy-parking').addEventListener('click',buyParking);document.getElementById('add-route').addEventListener('click',addRoute);document.getElementById('advance-day').addEventListener('click',simulateDay);document.getElementById('advance-week').addEventListener('click',()=>{for(let i=0;i<7;i++)simulateDay();});el('route-assign').addEventListener('change',()=>{});
 
-/* assign bus when dropdown changed in add-route form (user picks bus) */
-el('route-assign').addEventListener('change', ()=>{/* selection read on add */});
-
-/* initialize */
-function init(){
-  state.balance = START_BALANCE;
-  state.day = 1;
-  addLog('Game started. Balance set to ' + money(START_BALANCE) + '.');
-  updateUI();
-}
-init();
+function init(){state.balance=START_BALANCE;state.day=1;addLog('Game started. Balance set to '+money(START_BALANCE)+'.');updateUI();}init();
 
 </script>
 </body>
