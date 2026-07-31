@@ -1,438 +1,340 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8"/>
-<title>Bus Company Simulator</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bus Company — Simulator (Grid Map, Manual Drive)</title>
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:16px;color:#111}
-  h1,h2{margin:.2rem 0}
+  :root{--bg:#fafafa;--card:#fff;--muted:#666}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:12px;background:var(--bg);color:#111}
+  h1{margin:.2rem 0;font-size:1.2rem}
   .row{display:flex;gap:12px;flex-wrap:wrap}
-  .card{border:1px solid #ddd;padding:12px;border-radius:8px;flex:1 1 260px;background:#fafafa}
-  button{padding:6px 10px;margin:4px}
-  table{width:100%;border-collapse:collapse}
-  th,td{padding:6px;border:1px solid #eee;text-align:left}
-  input[type=number]{width:80px}
+  .card{background:var(--card);border:1px solid #e6e6e6;padding:10px;border-radius:10px;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
+  .col{flex:1 1 300px}
+  button{padding:8px 10px;border-radius:6px;border:1px solid #ddd;background:#f7f7f7}
   label{display:block;margin:6px 0;font-size:90%}
-  .small{font-size:90%;color:#444}
-  #drive-panel{border:1px solid #cfc;padding:12px;border-radius:8px;background:#f7fff7;margin-top:12px}
-  .progress{height:14px;background:#eee;border-radius:8px;overflow:hidden}
-  .progress > i{display:block;height:100%;background:linear-gradient(90deg,#4caf50,#8bc34a);width:0%}
+  input[type=number],input[type=text],select{padding:6px;border-radius:6px;border:1px solid #ddd}
+  #map-wrap{width:100%;max-width:900px}
+  canvas{width:100%;height:auto;border:1px solid #ddd;background:#e9f1ff;border-radius:6px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .log{max-height:220px;overflow:auto;padding:8px;background:#fff;border-radius:8px;border:1px solid #eee}
+  .small{font-size:12px;color:var(--muted)}
+  .mobile-joy{display:none;position:fixed;left:12px;bottom:12px;z-index:999}
+  .joy-btn{width:56px;height:56px;border-radius:10px;margin:4px;background:rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center}
+  .mobile-actions{display:none;position:fixed;right:12px;bottom:12px;z-index:999}
+  @media (max-width:700px){
+    .mobile-joy{display:block}
+    .mobile-actions{display:block}
+    .row{flex-direction:column}
+    .col{flex-basis:100%}
+  }
 </style>
 </head>
 <body>
-  <h1>Bus Company — Simulator</h1>
-  <p><strong>Starting balance:</strong> £10,000,000 — rules implemented per your sheet. This version adds route locations and an interactive driving simulator (drive runs in realtime with a progress bar).</p>
+  <h1>Bus Company — Simulator (Grid Map)</h1>
+  <p class="small">Manual steering (WASD / arrow keys) plus on-screen touch controls for phones. Routes have stops — drive the bus to pick up passengers and earn fares. Autosave enabled.</p>
 
   <div class="row">
-    <div class="card" id="panel-stats">
-      <h2>Company</h2>
+    <div class="card col" id="left">
+      <h2 style="margin:0.2rem 0">Map & Driving</h2>
+      <div id="map-wrap">
+        <canvas id="map" width="900" height="540"></canvas>
+      </div>
+      <div class="controls">
+        <button id="toggle-draw-route">Start/Stop Route Editor</button>
+        <button id="set-start">Place Bus Here</button>
+        <button id="start-drive">Enter Drive Mode</button>
+        <button id="stop-drive">Exit Drive Mode</button>
+        <button id="reset-map">Reset Map</button>
+      </div>
+      <div class="small">Route editor: click on the map to place stops. When finished, click Start Drive and steer the bus through stops to collect passengers.</div>
+    </div>
+
+    <div class="card col" id="right">
+      <h2 style="margin:0.2rem 0">Company</h2>
       <div>Balance: <strong id="balance">£0</strong></div>
       <div>Day: <span id="day">0</span></div>
       <div>Drivers: <span id="drivers">0</span></div>
       <div>Buses owned: <span id="buses-count">0</span></div>
-      <div>Routes: <span id="routes-count">0</span></div>
-      <hr/>
-      <button id="advance-day">Advance 1 day</button>
-      <button id="advance-week">Advance 7 days</button>
-      <div class="small">Tip: assign a bus to a route, then click Drive. If no bus is assigned you can still drive manually (you'll act as the driver).</div>
-    </div>
-
-    <div class="card" id="panel-buys">
-      <h2>Buy / Hire</h2>
-      <div><strong>Management cost per action:</strong> £50</div>
-      <label>Buy bus:
+      <hr />
+      <h3 style="margin:0.2rem 0">Buy / Hire</h3>
+      <label>Buy bus model:
         <select id="buy-bus-type"></select>
       </label>
-      <button id="buy-bus">Buy bus</button>
-      <label>Hire driver: <button id="hire-driver">Hire (£50 management + first day wages)</button></label>
-      <div class="small">Staff wage: £5 per driver per day</div>
-      <hr/>
-      <label>Company actions:
-        <button id="unlock-route">Unlock new route (£50)</button>
-        <button id="buy-parking">Buy parking space (£50)</button>
-      </label>
-    </div>
-
-    <div class="card" id="panel-routes">
-      <h2>Routes</h2>
-      <label>New route name: <input id="route-name" value="Route A"></label>
-      <label>Location (brief): <input id="route-location" value="Town Centre"></label>
-      <label>Frequency (minutes): <input id="route-freq" type="number" value="30"></label>
-      <label>Expected passengers per run: <input id="route-expected" type="number" value="30"></label>
-      <label>Assign bus:
-        <select id="route-assign"></select>
-      </label>
-      <button id="add-route">Add Route (unlocks cost £50 when first used)</button>
-      <hr/>
-      <table id="routes-table">
-        <thead><tr><th>Name</th><th>Location</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Drive</th><th>Remove</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div style="display:flex;gap:8px"><button id="buy-bus">Buy bus</button><button id="hire-driver">Hire driver</button></div>
+      <div class="small">Prices are in £. Management fee per action £50. Driver wage £5/day.</div>
+      <hr />
+      <h3 style="margin:0.2rem 0">Route</h3>
+      <label>Route name: <input id="route-name" value="Route 1"></label>
+      <label>Expected passengers per stop: <input id="route-expected" type="number" value="8" min="0"></label>
+      <div style="display:flex;gap:8px;margin-top:6px"><button id="save-route">Save Route</button><button id="assign-bus">Assign Bus to Route</button></div>
+      <div class="small">Save route after placing stops. Assign any owned bus to the route so it will run automatically when not driven.</div>
+      <hr />
+      <h3 style="margin:0.2rem 0">Events</h3>
+      <div class="log" id="log"></div>
     </div>
   </div>
 
-  <div id="drive-panel" style="display:none">
-    <h3>Drive Route</h3>
-    <div id="drive-info"></div>
-    <div>Runs left: <span id="drive-runs-left">0</span></div>
-    <div class="progress" aria-hidden="true"><i id="drive-progress"></i></div>
-    <div style="margin-top:8px">
-      <button id="drive-start">Start next run</button>
-      <button id="drive-stop">Stop driving</button>
+  <!-- Mobile touch controls -->
+  <div class="mobile-joy">
+    <div style="display:flex;flex-direction:column;align-items:center">
+      <div class="joy-btn" id="joy-up">▲</div>
+      <div style="display:flex"><div class="joy-btn" id="joy-left">◀</div><div style="width:8px"></div><div class="joy-btn" id="joy-right">▶</div></div>
+      <div class="joy-btn" id="joy-down">▼</div>
     </div>
-    <div class="small">While driving you guarantee on-time bonus and get a passenger boost. Driving simulates each run (takes a few seconds) so you can watch progress.</div>
   </div>
-
-  <div class="row" style="margin-top:12px">
-    <div class="card" style="flex:1 1 100%">
-      <h2>Events Log</h2>
-      <div id="log" style="max-height:300px;overflow:auto;background:#fff;padding:8px;border-radius:6px;border:1px solid #eee"></div>
+  <div class="mobile-actions">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button id="mobile-start">Start Run</button>
+      <button id="mobile-stop">Stop Run</button>
     </div>
   </div>
 
 <script>
-/* === Game constants per your rules === */
+/* ======= Game constants and state ======= */
 const START_BALANCE = 10000000;
-const STAFF_WAGE_PER_DAY = 5; // per driver
-const STANDARD_FARE = 2.00; // per passenger
-const ROUTE_EARNING_PER_PASSENGER = 2.00;
-const ROUTE_COMPLETION_BONUS = 50;
-const ON_TIME_BONUS = 75;
-const FUEL_COST_PER_ROUTE = 60;
-const FUEL_COST_PER_DAY = 150; // company
-const MAINTENANCE_PER_ROUTE = 50;
-const DAILY_MAINTENANCE = 70; // company
-const WEEKLY_MAINTENANCE = 100; // company
-const FULL_SERVICE = 100;
-const DAMAGE_MINOR = 50;
-const DAMAGE_MEDIUM = 75;
-const DAMAGE_MAJOR = 100;
 const MANAGEMENT_ACTION_COST = 50;
-const BUS_RUN_COST = { 'single':20, 'double':35, 'articulated':50 };
+const STAFF_WAGE_PER_DAY = 5;
+const FARE_PER_PASSENGER = 2; // £
 
-/* Bus purchase prices from your list */
 const BUS_MODELS = [
-  {id:'Enviro200', label:'Enviro200 — Single (£100)', price:100, type:'single'},
-  {id:'WrightStreetLite', label:'Wright StreetLite — Single (£110)', price:110, type:'single'},
-  {id:'MercedesCitaro', label:'Mercedes Citaro — Single (£130)', price:130, type:'single'},
-  {id:'ScaniaOmnicity', label:'Scania Omnicity — Single (£120)', price:120, type:'single'},
-  {id:'Enviro400', label:'Enviro400 — Double (£140)', price:140, type:'double'},
-  {id:'Enviro400MMC', label:'Enviro400MMC — Double (£150)', price:150, type:'double'},
-  {id:'WrightGemini2', label:'Wright Gemini 2 — Double (£130)', price:130, type:'double'},
-  {id:'VolvoB9TL', label:'Volvo B9TL — Double (£140)', price:140, type:'double'},
-  {id:'MercedesCitaroG', label:'Mercedes Citaro G — Articulated (£150)', price:150, type:'articulated'},
-  // second-hand
-  {id:'Enviro200_2010', label:'Enviro200 (2010) — Second-hand (£90)', price:90, type:'single'},
-  {id:'Enviro400_2009', label:'Enviro400 (2009) — Second-hand (£100)', price:100, type:'double'},
-  {id:'WrightGemini_2008', label:'Wright Gemini (2008) — Second-hand (£95)', price:95, type:'double'}
+  {id:'Enviro200', label:'Enviro200 — Single', price:100, capacity:40},
+  {id:'WrightStreetLite', label:'Wright StreetLite — Single', price:110, capacity:38},
+  {id:'Enviro400', label:'Enviro400 — Double', price:140, capacity:80},
+  {id:'MercedesCitaroG', label:'Mercedes Citaro G — Articulated', price:150, capacity:110},
+  {id:'Enviro200_2010', label:'Enviro200 (2010) — Second-hand', price:90, capacity:40},
+  {id:'WrightGemini_2008', label:'Wright Gemini (2008) — Second-hand', price:95, capacity:74}
 ];
 
-/* === Game state === */
 let state = {
-  day: 1,
+  day:1,
   balance: START_BALANCE,
-  drivers: 0,
-  buses: [], // {id, modelId, type, name}
-  routes: [], // {id,name,location,freq,expected,assignedBusId,lastPassengers}
-  unlockedRoutes: 0,
-  log: [],
-  drivenRoutes: {} // routeId -> true if player drove it today
+  drivers:0,
+  buses:[], // {id, modelId, name}
+  routes:[], // {id,name,stops:[{x,y,expected}], assignedBusId, expected}
+  selectedRouteId: null,
+  busOnMap: {x:150,y:150,angle:0,driving:false,speed:0,assignedRoute:null},
+  drawingRoute:false,
+  currentEditedStops: [],
+  log:[]
 };
 
-/* === UI helpers === */
+/* ======= Utilities ======= */
 const el = id => document.getElementById(id);
-function money(n){ return '£' + Number(n).toLocaleString(undefined,{maximumFractionDigits:0}); }
-function addLog(txt){
-  const log = el('log');
-  const p = document.createElement('div');
-  p.textContent = txt;
-  log.prepend(p);
-  state.log.push({day:state.day, text:txt});
+function money(n){return '£' + Number(n).toLocaleString();}
+function idNow(prefix){return prefix + Date.now().toString(36);} 
+function saveState(){ try{ localStorage.setItem('stancoach_v1', JSON.stringify(state)); addLog('Saved game (autosave)'); }catch(e){console.warn('save failed',e);} }
+function loadState(){ try{ const s=localStorage.getItem('stancoach_v1'); if(s){ state = JSON.parse(s); addLog('Loaded saved game'); } }catch(e){console.warn('load failed',e);} }
+
+/* ======= UI & map ======= */
+const canvas = el('map');
+const ctx = canvas.getContext('2d');
+const MAP_W = canvas.width;
+const MAP_H = canvas.height;
+
+function drawGrid(){
+  ctx.clearRect(0,0,MAP_W,MAP_H);
+  // background
+  ctx.fillStyle='#e9f1ff';
+  ctx.fillRect(0,0,MAP_W,MAP_H);
+  // grid
+  ctx.strokeStyle='rgba(0,0,0,0.06)';
+  for(let x=0;x<=MAP_W;x+=60){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,MAP_H); ctx.stroke(); }
+  for(let y=0;y<=MAP_H;y+=60){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(MAP_W,y); ctx.stroke(); }
 }
-function updateUI(){
-  el('balance').textContent = money(Math.round(state.balance));
-  el('day').textContent = state.day;
-  el('drivers').textContent = state.drivers;
-  el('buses-count').textContent = state.buses.length;
-  el('routes-count').textContent = state.routes.length;
 
-  // buses dropdowns
-  const buySel = el('buy-bus-type');
-  buySel.innerHTML = '';
-  BUS_MODELS.forEach(m=> {
-    const opt = document.createElement('option');
-    opt.value = m.id; opt.textContent = m.label;
-    buySel.appendChild(opt);
+function drawStops(stops){
+  stops.forEach((s,i)=>{
+    ctx.fillStyle = '#ff7043';
+    ctx.beginPath(); ctx.arc(s.x,s.y,8,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#000'; ctx.font='12px sans-serif'; ctx.fillText((i+1)+" "+(s.expected||0), s.x+10, s.y+4);
   });
+}
 
-  const assignSel = el('route-assign');
-  assignSel.innerHTML = '<option value="">(none)</option>';
-  state.buses.forEach(b=>{
-    const m = BUS_MODELS.find(x=>x.id===b.modelId);
-    const opt = document.createElement('option');
-    opt.value = b.id; opt.textContent = `${b.name} (${m.label})`;
-    assignSel.appendChild(opt);
-  });
+function drawBus(){
+  const b = state.busOnMap;
+  ctx.save();
+  ctx.translate(b.x,b.y);
+  ctx.rotate(b.angle);
+  // simple rectangle bus
+  ctx.fillStyle='#2b7cff'; ctx.fillRect(-18,-10,36,20);
+  ctx.fillStyle='#fff'; ctx.fillRect(-10,-6,20,12);
+  ctx.restore();
+}
 
-  // routes table
-  const tbody = el('routes-table').querySelector('tbody');
-  tbody.innerHTML = '';
+function render(){
+  drawGrid();
+  // draw existing routes
   state.routes.forEach(r=>{
-    const tr = document.createElement('tr');
-    const assigned = state.buses.find(b=>b.id===r.assignedBusId);
-    const driveBtn = `<button class="drive-btn" data-id="${r.id}">Drive</button>`;
-    tr.innerHTML = `<td>${r.name}</td><td>${r.location || ''}</td><td>${r.freq}m</td><td>${r.expected}</td>
-      <td>${assigned ? assigned.name : '(none)'}</td>
-      <td>${r.lastPassengers ?? '-'}</td>
-      <td>${driveBtn}</td>
-      <td><button data-id="${r.id}" class="remove-route">Remove</button></td>`;
-    tbody.appendChild(tr);
-  });
-
-  // bind remove
-  document.querySelectorAll('.remove-route').forEach(b=>{
-    b.onclick = e => {
-      const id = e.target.dataset.id;
-      state.routes = state.routes.filter(r=>r.id!==id);
-      addLog(`Route removed: ${id}`);
-      updateUI();
-    };
-  });
-
-  // bind drive buttons
-  document.querySelectorAll('.drive-btn').forEach(b=>{
-    b.onclick = e => {
-      const id = e.target.dataset.id;
-      openDrivePanel(id);
-    };
-  });
-}
-
-/* === Actions === */
-function buyBus(){
-  const sel = el('buy-bus-type').value;
-  const model = BUS_MODELS.find(m=>m.id===sel);
-  if(!model) return;
-  const cost = model.price; // use the listed price directly (price is in £)
-  if(state.balance < cost){ alert('Not enough funds'); return; }
-  state.balance -= cost;
-  state.balance -= MANAGEMENT_ACTION_COST;
-  const id = 'bus' + Date.now();
-  const name = `${model.id}-${state.buses.length+1}`;
-  state.buses.push({id, modelId:model.id, type:model.type, name});
-  addLog(`Bought bus ${name} for ${money(cost)}.`);
-  updateUI();
-}
-
-function hireDriver(){
-  if(state.balance < MANAGEMENT_ACTION_COST + STAFF_WAGE_PER_DAY){ alert('Not enough funds'); return; }
-  state.balance -= MANAGEMENT_ACTION_COST;
-  state.drivers += 1;
-  addLog(`Hired driver (management £${MANAGEMENT_ACTION_COST}).`);
-  updateUI();
-}
-
-function unlockRoute(){
-  if(state.balance < MANAGEMENT_ACTION_COST){ alert('Not enough funds'); return; }
-  state.balance -= MANAGEMENT_ACTION_COST;
-  state.unlockedRoutes += 1;
-  addLog(`Unlocked a new route slot (cost £${MANAGEMENT_ACTION_COST}).`);
-  updateUI();
-}
-
-function buyParking(){
-  if(state.balance < MANAGEMENT_ACTION_COST){ alert('Not enough funds'); return; }
-  state.balance -= MANAGEMENT_ACTION_COST;
-  addLog(`Bought parking space (cost £${MANAGEMENT_ACTION_COST}).`);
-  updateUI();
-}
-
-function addRoute(){
-  if(state.balance < MANAGEMENT_ACTION_COST){ alert('Not enough funds for unlock'); return; }
-  const name = el('route-name').value || ('Route ' + (state.routes.length+1));
-  const location = el('route-location').value || '';
-  const freq = Number(el('route-freq').value) || 30;
-  const expected = Number(el('route-expected').value) || 10;
-  const assignedBusId = el('route-assign').value || null;
-  state.balance -= MANAGEMENT_ACTION_COST;
-  const id = 'route' + Date.now();
-  state.routes.push({id,name,location,freq,expected,assignedBusId,lastPassengers:0});
-  addLog(`Added route ${name} (${location}) freq ${freq}m, expected ${expected} passengers/run.`);
-  updateUI();
-}
-
-/* === Driving === */
-let currentDrive = null; // {routeId,runsLeft,runsTotal,intervalId}
-function openDrivePanel(routeId){
-  const route = state.routes.find(r=>r.id===routeId);
-  if(!route){ alert('Route not found'); return; }
-  // allow driving even without assigned bus (player drives company bus)
-  const runs = Math.max(1, Math.floor(24*60 / Math.max(1, route.freq)));
-  currentDrive = {routeId: route.id, runsLeft: runs, runsTotal: runs};
-  el('drive-info').textContent = `${route.name} — Location: ${route.location || '—'}. Expected ${route.expected} passengers/run.`;
-  el('drive-runs-left').textContent = currentDrive.runsLeft;
-  el('drive-progress').style.width = '0%';
-  el('drive-panel').style.display = 'block';
-}
-
-function stopDriving(){
-  if(currentDrive && currentDrive.intervalId){
-    clearInterval(currentDrive.intervalId);
-    currentDrive.intervalId = null;
-  }
-}
-
-function finishDriving(abandon=false){
-  stopDriving();
-  if(currentDrive){
-    if(abandon){ addLog(`Stopped driving ${currentDrive.routeId} with ${currentDrive.runsLeft} runs left.`); }
-    else { addLog(`Finished driving ${currentDrive.routeId}.`); }
-    currentDrive = null;
-    el('drive-panel').style.display = 'none';
-    updateUI();
-  }
-}
-
-function driveNextRunAuto(){
-  if(!currentDrive) return;
-  if(currentDrive.runsLeft <= 0){ finishDriving(false); return; }
-  // simulate a short run (4 seconds) with progress updates
-  const runTimeMs = 4000; // 4s per run for the player to watch
-  const steps = 40;
-  let step = 0;
-  el('drive-progress').style.width = '0%';
-  currentDrive.intervalId = setInterval(()=>{
-    step += 1;
-    const pct = Math.round((step/steps)*100);
-    el('drive-progress').style.width = pct + '%';
-    if(step >= steps){
-      clearInterval(currentDrive.intervalId);
-      currentDrive.intervalId = null;
-      completeDrivenRun();
+    // line between stops
+    if(r.stops && r.stops.length>0){
+      ctx.strokeStyle='rgba(20,120,20,0.6)'; ctx.lineWidth=2; ctx.beginPath();
+      r.stops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke();
+      // draw stops
+      drawStops(r.stops);
     }
-  }, runTimeMs/steps);
-}
-
-function completeDrivenRun(){
-  if(!currentDrive) return;
-  const route = state.routes.find(r=>r.id===currentDrive.routeId);
-  if(!route) return;
-  // passenger boost for player: +30% compared to random base
-  const basePassengers = Math.max(0, Math.round(route.expected * (0.5 + Math.random()*0.8)));
-  const passengers = Math.round(basePassengers * 1.3);
-  const income = passengers * ROUTE_EARNING_PER_PASSENGER + ROUTE_COMPLETION_BONUS + ON_TIME_BONUS;
-  const costs = FUEL_COST_PER_ROUTE + MAINTENANCE_PER_ROUTE;
-  state.balance += income;
-  state.balance -= costs;
-  route.lastPassengers = (route.lastPassengers || 0) + passengers;
-  state.drivenRoutes[route.id] = true; // mark to skip auto-sim
-  addLog(`You drove ${route.name}: passengers ${passengers}, +${money(income)} income, ${money(costs)} costs.`);
-  currentDrive.runsLeft -= 1;
-  el('drive-runs-left').textContent = currentDrive.runsLeft;
-  if(currentDrive.runsLeft <= 0){ finishDriving(false); }
-}
-
-/* === Simulation per day === */
-function simulateDay(){
-  let income = 0;
-  let costs = 0;
-
-  // daily driver wages
-  const wages = state.drivers * STAFF_WAGE_PER_DAY;
-  costs += wages;
-
-  // company daily fuel & maintenance
-  costs += FUEL_COST_PER_DAY + DAILY_MAINTENANCE;
-
-  // bus running cost per bus
-  state.buses.forEach(b => {
-    const runCost = BUS_RUN_COST[b.type] || 20;
-    costs += runCost;
   });
-
-  // per-route costs & earnings
-  state.routes.forEach(route => {
-    // skip routes the player drove today
-    if(state.drivenRoutes[route.id]){
-      return;
-    }
-    if(!route.assignedBusId){
-      route.lastPassengers = route.lastPassengers || 0;
-      // still cost: maintenance per route and fuel per route
-      costs += MAINTENANCE_PER_ROUTE + FUEL_COST_PER_ROUTE;
-      return;
-    }
-    // simulate number of runs per day: 24h*60/freq
-    const runs = Math.max(1, Math.floor(24*60 / Math.max(1, route.freq)));
-    let passengersTotal = 0;
-    for(let i=0;i<runs;i++){
-      const passengers = Math.max(0, Math.round(route.expected * (0.5 + Math.random()*0.8)));
-      passengersTotal += passengers;
-      income += passengers * ROUTE_EARNING_PER_PASSENGER;
-      income += ROUTE_COMPLETION_BONUS;
-      if(Math.random() < 0.8) income += ON_TIME_BONUS;
-      costs += FUEL_COST_PER_ROUTE + MAINTENANCE_PER_ROUTE;
-    }
-    route.lastPassengers = passengersTotal;
-  });
-
-  // random damage event (per day company-level)
-  const r = Math.random();
-  if(r < 0.01){
-    costs += DAMAGE_MAJOR;
-    addLog(`Major damage today: ${money(DAMAGE_MAJOR)}.`);
-  } else if(r < 0.04){
-    costs += DAMAGE_MEDIUM;
-    addLog(`Medium damage today: ${money(DAMAGE_MEDIUM)}.`);
-  } else if(r < 0.12){
-    costs += DAMAGE_MINOR;
-    addLog(`Minor damage today: ${money(DAMAGE_MINOR)}.`);
+  // draw editing stops
+  if(state.drawingRoute && state.currentEditedStops.length>0){
+    // polyline
+    ctx.strokeStyle='rgba(200,80,0,0.8)'; ctx.lineWidth=2; ctx.beginPath();
+    state.currentEditedStops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke();
+    drawStops(state.currentEditedStops);
   }
-
-  // weekly maintenance if day divisible by 7
-  if(state.day % 7 === 0){
-    costs += WEEKLY_MAINTENANCE;
-    addLog(`Weekly maintenance charged: ${money(WEEKLY_MAINTENANCE)}.`);
-  }
-
-  // add/subtract to balance
-  state.balance += income;
-  state.balance -= costs;
-
-  addLog(`Day ${state.day} results: Income ${money(Math.round(income))}, Costs ${money(Math.round(costs))}, Net ${money(Math.round(income - costs))}. Balance now ${money(Math.round(state.balance))}.`);
-  state.day += 1;
-
-  // clear drivenRoutes for next day (they only skip today's auto-sim)
-  state.drivenRoutes = {};
-
-  updateUI();
+  drawBus();
 }
 
-/* === Events and bindings === */
-document.getElementById('buy-bus').addEventListener('click', buyBus);
-document.getElementById('hire-driver').addEventListener('click', hireDriver);
-document.getElementById('unlock-route').addEventListener('click', unlockRoute);
-document.getElementById('buy-parking').addEventListener('click', buyParking);
-document.getElementById('add-route').addEventListener('click', addRoute);
-document.getElementById('advance-day').addEventListener('click', simulateDay);
-document.getElementById('advance-week').addEventListener('click', ()=>{ for(let i=0;i<7;i++) simulateDay(); });
-
-document.getElementById('drive-start').addEventListener('click', ()=>{
-  // start the next run if available
-  if(currentDrive && !currentDrive.intervalId){ driveNextRunAuto(); }
+/* ======= Map interactions ======= */
+let isPointerDown=false;
+canvas.addEventListener('pointerdown',(e)=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (canvas.width/rect.width);
+  const y = (e.clientY - rect.top) * (canvas.height/rect.height);
+  if(state.drawingRoute){ state.currentEditedStops.push({x:Math.round(x),y:Math.round(y),expected: Number(el('route-expected').value||8)}); addLog('Added stop to current route'); saveState(); render(); return; }
+  // set bus position
+  state.busOnMap.x = x; state.busOnMap.y = y; addLog('Placed bus at map position'); saveState(); render();
 });
-document.getElementById('drive-stop').addEventListener('click', ()=>{ finishDriving(true); });
 
-el('route-assign').addEventListener('change', ()=>{/* selection read on add */});
+el('toggle-draw-route').addEventListener('click', ()=>{ state.drawingRoute = !state.drawingRoute; el('toggle-draw-route').textContent = state.drawingRoute? 'Stop Route Editor' : 'Start/Stop Route Editor'; if(!state.drawingRoute) render(); saveState(); });
+el('set-start').addEventListener('click', ()=>{ state.busOnMap.x = 150; state.busOnMap.y = 150; addLog('Bus reset to start position'); saveState(); render(); });
+el('reset-map').addEventListener('click', ()=>{ if(confirm('Reset all routes and bus position?')){ state.routes=[]; state.currentEditedStops=[]; state.busOnMap={x:150,y:150,angle:0,driving:false}; addLog('Map reset'); saveState(); render(); } });
 
-/* initialize */
-function init(){
-  state.balance = START_BALANCE;
-  state.day = 1;
-  addLog('Game started. Balance set to ' + money(START_BALANCE) + '.');
-  updateUI();
+/* ======= Route save/assign ======= */
+el('save-route').addEventListener('click', ()=>{
+  if(state.currentEditedStops.length===0){ alert('Place at least one stop on the map first'); return; }
+  const rid = idNow('route');
+  const name = el('route-name').value || ('Route ' + (state.routes.length+1));
+  const expected = Number(el('route-expected').value) || 8;
+  state.routes.push({id:rid,name,stops: state.currentEditedStops.map(s=>({x:s.x,y:s.y,expected})),assignedBusId:null,expected});
+  state.currentEditedStops = [];
+  addLog('Saved route ' + name);
+  saveState(); render(); updateUI();
+});
+
+el('assign-bus').addEventListener('click', ()=>{
+  if(state.routes.length===0){ alert('No saved routes'); return; }
+  if(state.buses.length===0){ alert('No buses to assign'); return; }
+  // simple assign first bus to first route for MVP
+  const route = state.routes[0];
+  const bus = state.buses[0];
+  route.assignedBusId = bus.id;
+  addLog('Assigned bus '+bus.name+' to route '+route.name);
+  saveState(); updateUI(); render();
+});
+
+/* ======= Drive mechanics (manual steering) ======= */
+let keys = {up:false,down:false,left:false,right:false};
+const MAX_SPEED = 2.0; const ACC=0.06; const FRICTION=0.98;
+
+function updatePhysics(){
+  const b = state.busOnMap;
+  // apply controls
+  if(keys.up){ b.speed = Math.min(MAX_SPEED, b.speed + ACC); }
+  if(keys.down){ b.speed = Math.max(-MAX_SPEED/2, b.speed - ACC); }
+  if(!keys.up && !keys.down){ b.speed *= FRICTION; if(Math.abs(b.speed)<0.02) b.speed=0; }
+  if(keys.left){ b.angle -= 0.04; }
+  if(keys.right){ b.angle += 0.04; }
+  // move
+  b.x += Math.cos(b.angle) * b.speed * 1.8;
+  b.y += Math.sin(b.angle) * b.speed * 1.8;
+  // clamp
+  b.x = Math.max(10, Math.min(MAP_W-10, b.x));
+  b.y = Math.max(10, Math.min(MAP_H-10, b.y));
+  // detect stops
+  checkStopProximity();
 }
-init();
+
+function checkStopProximity(){
+  const b = state.busOnMap;
+  state.routes.forEach(route=>{
+    route.stops.forEach((s,idx)=>{
+      const dx=b.x-s.x, dy=b.y-s.y; const d=Math.sqrt(dx*dx+dy*dy);
+      if(d < 18){ // at stop
+        // board passengers once per arrival
+        if(!s._visitedToday){
+          const boarding = Math.min(Math.round(s.expected*(0.5+Math.random()*0.8)), getBusCapacity());
+          const income = boarding * FARE_PER_PASSENGER;
+          state.balance += income;
+          s._visitedToday = true;
+          addLog(`Picked up ${boarding} passengers at ${route.name} stop ${idx+1} — +${money(income)}`);
+          saveState(); updateUI();
+        }
+      }
+    });
+  });
+}
+
+function getBusCapacity(){ if(state.buses.length===0) return 40; const model = BUS_MODELS.find(m=>m.id===state.buses[0].modelId); return model ? model.capacity : 40; }
+
+let physicsTimer = null;
+function startPhysics(){ if(physicsTimer) return; physicsTimer = setInterval(()=>{ updatePhysics(); render(); }, 30); }
+function stopPhysics(){ if(physicsTimer){ clearInterval(physicsTimer); physicsTimer=null; } }
+
+/* keyboard controls */
+window.addEventListener('keydown', (e)=>{
+  if(e.key==='ArrowUp' || e.key==='w' || e.key==='W') keys.up=true;
+  if(e.key==='ArrowDown' || e.key==='s' || e.key==='S') keys.down=true;
+  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') keys.left=true;
+  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') keys.right=true;
+});
+window.addEventListener('keyup', (e)=>{
+  if(e.key==='ArrowUp' || e.key==='w' || e.key==='W') keys.up=false;
+  if(e.key==='ArrowDown' || e.key==='s' || e.key==='S') keys.down=false;
+  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') keys.left=false;
+  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') keys.right=false;
+});
+
+/* mobile joystick */
+['joy-up','joy-down','joy-left','joy-right'].forEach(id=>{
+  const elJoy = document.getElementById(id);
+  elJoy.addEventListener('pointerdown', ()=>{ if(id.endsWith('up')) keys.up=true; if(id.endsWith('down')) keys.down=true; if(id.endsWith('left')) keys.left=true; if(id.endsWith('right')) keys.right=true; startPhysics(); });
+  elJoy.addEventListener('pointerup', ()=>{ if(id.endsWith('up')) keys.up=false; if(id.endsWith('down')) keys.down=false; if(id.endsWith('left')) keys.left=false; if(id.endsWith('right')) keys.right=false; });
+  elJoy.addEventListener('pointercancel', ()=>{ if(id.endsWith('up')) keys.up=false; if(id.endsWith('down')) keys.down=false; if(id.endsWith('left')) keys.left=false; if(id.endsWith('right')) keys.right=false; });
+});
+
+/* start/stop drive buttons */
+el('start-drive').addEventListener('click', ()=>{ state.busOnMap.driving=true; addLog('Entered drive mode'); startPhysics(); saveState(); });
+el('stop-drive').addEventListener('click', ()=>{ state.busOnMap.driving=false; addLog('Exited drive mode'); stopPhysics(); saveState(); });
+
+/* mobile start/stop */
+el('mobile-start').addEventListener('click', ()=>{ el('start-drive').click(); });
+el('mobile-stop').addEventListener('click', ()=>{ el('stop-drive').click(); });
+
+/* ======= Purchases & company ======= */
+function updateUI(){ el('balance').textContent = money(Math.round(state.balance)); el('day').textContent = state.day; el('drivers').textContent = state.drivers; el('buses-count').textContent = state.buses.length; // buy dropdown
+  const buySel = el('buy-bus-type'); buySel.innerHTML=''; BUS_MODELS.forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=`${m.label} — £${m.price}`; buySel.appendChild(o); });
+}
+
+el('buy-bus').addEventListener('click', ()=>{
+  const sel = el('buy-bus-type').value; const model = BUS_MODELS.find(m=>m.id===sel); if(!model)return; const cost = model.price; const total = cost + MANAGEMENT_ACTION_COST; if(!confirm(`Buy ${model.label} for £${cost}? Management fee £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return; if(state.balance < total){ alert('Not enough funds'); return; } state.balance -= cost; state.balance -= MANAGEMENT_ACTION_COST; const id=idNow('bus'); const name = `${model.id}-${state.buses.length+1}`; state.buses.push({id,modelId:model.id,name}); addLog(`Bought bus ${name} for ${money(cost)} (management £${MANAGEMENT_ACTION_COST}).`); saveState(); updateUI(); render(); });
+
+el('hire-driver').addEventListener('click', ()=>{ const total = MANAGEMENT_ACTION_COST + STAFF_WAGE_PER_DAY; if(state.balance < total){ alert('Not enough funds'); return;} state.balance -= MANAGEMENT_ACTION_COST; state.drivers +=1; addLog('Hired driver (management £'+MANAGEMENT_ACTION_COST+').'); saveState(); updateUI(); });
+
+/* ======= Logging ======= */
+function addLog(txt){ const l=el('log'); const p=document.createElement('div'); p.textContent = `[Day ${state.day}] ${txt}`; l.prepend(p); state.log.unshift({day:state.day,text:txt}); }
+
+/* ======= Autosave/load on start ======= */
+loadState(); updateUI(); render();
+// Ensure busOnMap defaults
+if(!state.busOnMap) state.busOnMap = {x:150,y:150,angle:0,speed:0}; render();
+
+// periodic autosave
+setInterval(saveState, 30000);
+
+// ensure visited flags clear each day when simulate day is called (not implemented fully in MVP)
+
+/* ======= Simple daily advance (keeps wages, maintenance) ======= */
+el('advance-week')?.addEventListener('click', ()=>{ for(let i=0;i<7;i++) simulateDay(); });
+el('advance-day')?.addEventListener('click', simulateDay);
+function simulateDay(){ // wages and simple maintenance
+  const wages = state.drivers * STAFF_WAGE_PER_DAY;
+  const maintenance = state.buses.length * 5;
+  state.balance -= (wages + maintenance);
+  addLog(`Daily tick: wages £${wages}, maintenance £${maintenance}`);
+  state.day +=1; // clear visited
+  state.routes.forEach(r=> r.stops.forEach(s=> s._visitedToday = false));
+  saveState(); updateUI(); render();
+}
 
 </script>
 </body>
