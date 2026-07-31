@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Bus Company — Simulator (Grid Map, Manual Drive)</title>
+<title>Bus Company — Simulator (Rapid Demo)</title>
 <style>
   :root{--bg:#fafafa;--card:#fff;--muted:#666}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:12px;background:var(--bg);color:#111}
   h1{margin:.2rem 0;font-size:1.2rem}
   .row{display:flex;gap:12px;flex-wrap:wrap}
-  .card{background:var(--card);border:1px solid #e6e6e6;padding:10px;border-radius:10px;box-shadow:0 1px 0 rgba(0,0,0,0.02)}
+  .card{background:var(--card);border:1px solid #e6e6e6;padding:10px;border-radius:10px}
   .col{flex:1 1 300px}
   button{padding:8px 10px;border-radius:6px;border:1px solid #ddd;background:#f7f7f7}
   label{display:block;margin:6px 0;font-size:90%}
@@ -19,323 +19,126 @@
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .log{max-height:220px;overflow:auto;padding:8px;background:#fff;border-radius:8px;border:1px solid #eee}
   .small{font-size:12px;color:var(--muted)}
-  .mobile-joy{display:none;position:fixed;left:12px;bottom:12px;z-index:999}
-  .joy-btn{width:56px;height:56px;border-radius:10px;margin:4px;background:rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center}
-  .mobile-actions{display:none;position:fixed;right:12px;bottom:12px;z-index:999}
-  @media (max-width:700px){
-    .mobile-joy{display:block}
-    .mobile-actions{display:block}
-    .row{flex-direction:column}
-    .col{flex-basis:100%}
-  }
+  @media (max-width:700px){ .row{flex-direction:column} .col{flex-basis:100%} }
 </style>
 </head>
 <body>
-  <h1>Bus Company — Simulator (Grid Map)</h1>
-  <p class="small">Manual steering (WASD / arrow keys) plus on-screen touch controls for phones. Routes have stops — drive the bus to pick up passengers and earn fares. Autosave enabled.</p>
+  <h1>Bus Company — Simulator (Rapid Demo)</h1>
+  <p class="small">Rapid demo: manual driving on a grid, basic economy, route editor, autosave, export/import. This is the first demo iteration.</p>
 
   <div class="row">
-    <div class="card col" id="left">
-      <h2 style="margin:0.2rem 0">Map & Driving</h2>
-      <div id="map-wrap">
-        <canvas id="map" width="900" height="540"></canvas>
-      </div>
+    <div class="card col">
+      <h2>Map & Driving</h2>
+      <div id="map-wrap"><canvas id="map" width="900" height="540"></canvas></div>
       <div class="controls">
-        <button id="toggle-draw-route">Start/Stop Route Editor</button>
-        <button id="set-start">Place Bus Here</button>
+        <button id="toggle-draw-route">Start Route Editor</button>
+        <button id="set-start">Reset Bus Pos</button>
         <button id="start-drive">Enter Drive Mode</button>
         <button id="stop-drive">Exit Drive Mode</button>
-        <button id="reset-map">Reset Map</button>
       </div>
-      <div class="small">Route editor: click on the map to place stops. When finished, click Start Drive and steer the bus through stops to collect passengers.</div>
+      <div class="small">Editor: tap/click to add stops. Save route in the company panel. Drive with WASD / arrows or touch controls (mobile).</div>
     </div>
 
-    <div class="card col" id="right">
-      <h2 style="margin:0.2rem 0">Company</h2>
+    <div class="card col">
+      <h2>Company</h2>
       <div>Balance: <strong id="balance">£0</strong></div>
       <div>Day: <span id="day">0</span></div>
       <div>Drivers: <span id="drivers">0</span></div>
       <div>Buses owned: <span id="buses-count">0</span></div>
       <hr />
-      <h3 style="margin:0.2rem 0">Buy / Hire</h3>
-      <label>Buy bus model:
-        <select id="buy-bus-type"></select>
-      </label>
+
+      <h3>Buy / Hire</h3>
+      <label>Buy bus model: <select id="buy-bus-type"></select></label>
       <div style="display:flex;gap:8px"><button id="buy-bus">Buy bus</button><button id="hire-driver">Hire driver</button></div>
-      <div class="small">Prices are in £. Management fee per action £50. Driver wage £5/day.</div>
+      <div class="small">Management fee per action £50. Driver wage £5/day.</div>
+
       <hr />
-      <h3 style="margin:0.2rem 0">Route</h3>
+      <h3>Route</h3>
       <label>Route name: <input id="route-name" value="Route 1"></label>
-      <label>Expected passengers per stop: <input id="route-expected" type="number" value="8" min="0"></label>
-      <div style="display:flex;gap:8px;margin-top:6px"><button id="save-route">Save Route</button><button id="assign-bus">Assign Bus to Route</button></div>
-      <div class="small">Save route after placing stops. Assign any owned bus to the route so it will run automatically when not driven.</div>
+      <label>Expected passengers / stop: <input id="route-expected" type="number" value="8"></label>
+      <div style="display:flex;gap:8px;margin-top:6px"><button id="save-route">Save Route</button>
+      <button id="assign-bus">Assign Bus to Route</button></div>
+
       <hr />
-      <h3 style="margin:0.2rem 0">Events</h3>
+      <h3>Tickets (demo)</h3>
+      <div class="small">Set ticket mix — used when passengers board (percentages must total 100).</div>
+      <label>Single %: <input id="t-single" type="number" value="70" min="0" max="100"></label>
+      <label>Day %: <input id="t-day" type="number" value="20" min="0" max="100"></label>
+      <label>Weekly %: <input id="t-week" type="number" value="10" min="0" max="100"></label>
+
+      <hr />
+      <h3>Saves</h3>
+      <div style="display:flex;gap:8px"><button id="btn-save">Save (local)</button><button id="btn-load">Load (local)</button>
+      <button id="btn-export">Export JSON</button><input id="import-file" type="file" style="display:none" accept="application/json" /></div>
+
+      <hr />
+      <h3>Events</h3>
       <div class="log" id="log"></div>
     </div>
   </div>
 
-  <!-- Mobile touch controls -->
-  <div class="mobile-joy">
-    <div style="display:flex;flex-direction:column;align-items:center">
-      <div class="joy-btn" id="joy-up">▲</div>
-      <div style="display:flex"><div class="joy-btn" id="joy-left">◀</div><div style="width:8px"></div><div class="joy-btn" id="joy-right">▶</div></div>
-      <div class="joy-btn" id="joy-down">▼</div>
-    </div>
-  </div>
-  <div class="mobile-actions">
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button id="mobile-start">Start Run</button>
-      <button id="mobile-stop">Stop Run</button>
-    </div>
-  </div>
-
 <script>
-/* ======= Game constants and state ======= */
 const START_BALANCE = 10000000;
 const MANAGEMENT_ACTION_COST = 50;
 const STAFF_WAGE_PER_DAY = 5;
-const FARE_PER_PASSENGER = 2; // £
+const FARE_SINGLE = 2; const FARE_DAY = 5; const FARE_WEEK = 20;
 
-const BUS_MODELS = [
-  {id:'Enviro200', label:'Enviro200 — Single', price:100, capacity:40},
-  {id:'WrightStreetLite', label:'Wright StreetLite — Single', price:110, capacity:38},
-  {id:'Enviro400', label:'Enviro400 — Double', price:140, capacity:80},
-  {id:'MercedesCitaroG', label:'Mercedes Citaro G — Articulated', price:150, capacity:110},
-  {id:'Enviro200_2010', label:'Enviro200 (2010) — Second-hand', price:90, capacity:40},
-  {id:'WrightGemini_2008', label:'Wright Gemini (2008) — Second-hand', price:95, capacity:74}
-];
+const BUS_MODELS = [ {id:'Enviro200',label:'Enviro200',price:95,capacity:40}, {id:'WrightLite',label:'Wright Lite',price:110,capacity:38} ];
 
-let state = {
-  day:1,
-  balance: START_BALANCE,
-  drivers:0,
-  buses:[], // {id, modelId, name}
-  routes:[], // {id,name,stops:[{x,y,expected}], assignedBusId, expected}
-  selectedRouteId: null,
-  busOnMap: {x:150,y:150,angle:0,driving:false,speed:0,assignedRoute:null},
-  drawingRoute:false,
-  currentEditedStops: [],
-  log:[]
-};
+let state = { day:1, balance:START_BALANCE, drivers:0, buses:[], routes:[], busOnMap:{x:150,y:150,angle:0,speed:0}, drawingRoute:false, currentEditedStops:[], log:[] };
 
-/* ======= Utilities ======= */
-const el = id => document.getElementById(id);
-function money(n){return '£' + Number(n).toLocaleString();}
-function idNow(prefix){return prefix + Date.now().toString(36);} 
-function saveState(){ try{ localStorage.setItem('stancoach_v1', JSON.stringify(state)); addLog('Saved game (autosave)'); }catch(e){console.warn('save failed',e);} }
-function loadState(){ try{ const s=localStorage.getItem('stancoach_v1'); if(s){ state = JSON.parse(s); addLog('Loaded saved game'); } }catch(e){console.warn('load failed',e);} }
+const el = id=>document.getElementById(id);
+function money(n){return '£'+Number(n).toLocaleString();}
+function idNow(p){return p+Date.now().toString(36);} 
 
-/* ======= UI & map ======= */
-const canvas = el('map');
-const ctx = canvas.getContext('2d');
-const MAP_W = canvas.width;
-const MAP_H = canvas.height;
+/* Save/Load/Export/Import */
+function saveStateLocal(){ try{ localStorage.setItem('stancoach_v1', JSON.stringify(state)); addLog('Saved locally'); }catch(e){addLog('Save failed');} }
+function loadStateLocal(){ try{ const s=localStorage.getItem('stancoach_v1'); if(s){ state = JSON.parse(s); addLog('Loaded local save'); updateUI(); render(); } else addLog('No local save found'); }catch(e){addLog('Load failed');} }
+function exportJSON(){ const data = JSON.stringify(state); const blob = new Blob([data],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download='stancoach-save.json'; a.click(); URL.revokeObjectURL(url); addLog('Exported JSON'); }
+el('btn-export').addEventListener('click', exportJSON);
+el('btn-save').addEventListener('click', saveStateLocal);
+el('btn-load').addEventListener('click', loadStateLocal);
+el('import-file').addEventListener('change', (ev)=>{ const f=ev.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=e=>{ try{ state=JSON.parse(e.target.result); addLog('Imported save'); updateUI(); render(); saveStateLocal(); }catch(err){ addLog('Import failed'); } }; r.readAsText(f); });
+el('btn-load').addEventListener('click', loadStateLocal);
 
-function drawGrid(){
-  ctx.clearRect(0,0,MAP_W,MAP_H);
-  // background
-  ctx.fillStyle='#e9f1ff';
-  ctx.fillRect(0,0,MAP_W,MAP_H);
-  // grid
-  ctx.strokeStyle='rgba(0,0,0,0.06)';
-  for(let x=0;x<=MAP_W;x+=60){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,MAP_H); ctx.stroke(); }
-  for(let y=0;y<=MAP_H;y+=60){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(MAP_W,y); ctx.stroke(); }
-}
+/* Map/Canvas */
+const canvas=el('map'); const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
+function drawGrid(){ ctx.clearRect(0,0,W,H); ctx.fillStyle='#e9f1ff'; ctx.fillRect(0,0,W,H); ctx.strokeStyle='rgba(0,0,0,0.06)'; for(let x=0;x<=W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();} for(let y=0;y<=H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();} }
+function drawStops(s){ s.forEach((p,i)=>{ ctx.fillStyle='#ff7043'; ctx.beginPath(); ctx.arc(p.x,p.y,8,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#000'; ctx.font='12px sans-serif'; ctx.fillText((i+1)+' '+(p.expected||0), p.x+10, p.y+4); }); }
+function drawBus(){ const b=state.busOnMap; ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle); ctx.fillStyle='#2b7cff'; ctx.fillRect(-18,-10,36,20); ctx.fillStyle='#fff'; ctx.fillRect(-10,-6,20,12); ctx.restore(); }
+function render(){ drawGrid(); state.routes.forEach(r=>{ if(r.stops && r.stops.length){ ctx.strokeStyle='rgba(20,120,20,0.6)'; ctx.lineWidth=2; ctx.beginPath(); r.stops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke(); drawStops(r.stops); } }); if(state.drawingRoute && state.currentEditedStops.length){ ctx.strokeStyle='rgba(200,80,0,0.8)'; ctx.lineWidth=2; ctx.beginPath(); state.currentEditedStops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke(); drawStops(state.currentEditedStops); } drawBus(); }
 
-function drawStops(stops){
-  stops.forEach((s,i)=>{
-    ctx.fillStyle = '#ff7043';
-    ctx.beginPath(); ctx.arc(s.x,s.y,8,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#000'; ctx.font='12px sans-serif'; ctx.fillText((i+1)+" "+(s.expected||0), s.x+10, s.y+4);
-  });
-}
+canvas.addEventListener('pointerdown', (e)=>{ const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(canvas.width/rect.width); const y=(e.clientY-rect.top)*(canvas.height/rect.height); if(state.drawingRoute){ state.currentEditedStops.push({x:Math.round(x),y:Math.round(y),expected: Number(el('route-expected').value||8)}); addLog('Added stop'); saveStateLocal(); render(); return; } state.busOnMap.x=x; state.busOnMap.y=y; addLog('Placed bus'); saveStateLocal(); render(); });
 
-function drawBus(){
-  const b = state.busOnMap;
-  ctx.save();
-  ctx.translate(b.x,b.y);
-  ctx.rotate(b.angle);
-  // simple rectangle bus
-  ctx.fillStyle='#2b7cff'; ctx.fillRect(-18,-10,36,20);
-  ctx.fillStyle='#fff'; ctx.fillRect(-10,-6,20,12);
-  ctx.restore();
-}
+/* Route save/assign */
+el('save-route').addEventListener('click', ()=>{ if(state.currentEditedStops.length===0){ alert('Add stops first'); return; } const rid=idNow('route'); const name=el('route-name').value||('Route '+(state.routes.length+1)); const expected=Number(el('route-expected').value)||8; state.routes.push({id:rid,name,stops:state.currentEditedStops.map(s=>({x:s.x,y:s.y,expected})),assignedBusId:null,expected}); state.currentEditedStops=[]; addLog('Saved route '+name); saveStateLocal(); render(); updateUI(); });
+el('assign-bus').addEventListener('click', ()=>{ if(!state.routes.length){ alert('No routes'); return;} if(!state.buses.length){ alert('Buy a bus first'); return;} // improved: present simple prompt to choose indices
+  const routeIndex = 0; const busIndex = 0; state.routes[routeIndex].assignedBusId = state.buses[busIndex].id; addLog('Assigned '+state.buses[busIndex].name+' → '+state.routes[routeIndex].name); saveStateLocal(); updateUI(); render(); });
 
-function render(){
-  drawGrid();
-  // draw existing routes
-  state.routes.forEach(r=>{
-    // line between stops
-    if(r.stops && r.stops.length>0){
-      ctx.strokeStyle='rgba(20,120,20,0.6)'; ctx.lineWidth=2; ctx.beginPath();
-      r.stops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke();
-      // draw stops
-      drawStops(r.stops);
-    }
-  });
-  // draw editing stops
-  if(state.drawingRoute && state.currentEditedStops.length>0){
-    // polyline
-    ctx.strokeStyle='rgba(200,80,0,0.8)'; ctx.lineWidth=2; ctx.beginPath();
-    state.currentEditedStops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke();
-    drawStops(state.currentEditedStops);
-  }
-  drawBus();
-}
+/* Driving physics (mobile + keyboard) */
+let keys={up:false,down:false,left:false,right:false}; const MAX=2.0,ACC=0.06,FR=0.98;
+function updatePhysics(){ const b=state.busOnMap; if(keys.up) b.speed=Math.min(MAX,b.speed+ACC); if(keys.down) b.speed=Math.max(-MAX/2,b.speed-ACC); if(!keys.up&&!keys.down){ b.speed*=FR; if(Math.abs(b.speed)<0.02) b.speed=0;} if(keys.left) b.angle-=0.04; if(keys.right) b.angle+=0.04; b.x+=Math.cos(b.angle)*b.speed*1.8; b.y+=Math.sin(b.angle)*b.speed*1.8; b.x=Math.max(10,Math.min(W-10,b.x)); b.y=Math.max(10,Math.min(H-10,b.y)); checkStopProximity(); }
+function checkStopProximity(){ const b=state.busOnMap; state.routes.forEach(route=>{ route.stops.forEach((s,idx)=>{ const dx=b.x-s.x,dy=b.y-s.y,d=Math.sqrt(dx*dx+dy*dy); if(d<18){ if(!s._visitedToday){ // boarding: determine ticket mix
+          const totalPass = Math.min(Math.round(s.expected*(0.5+Math.random()*0.8)), getBusCapacity());
+          // ticket mix from UI
+          const singleP=Number(el('t-single').value)||70; const dayP=Number(el('t-day').value)||20; const weekP=Number(el('t-week').value)||10; const rnd=Math.random()*100; let single=0,day=0,week=0; for(let i=0;i<totalPass;i++){ const r=Math.random()*100; if(r<singleP) single++; else if(r<singleP+dayP) day++; else week++; }
+          const income = single*FARE_SINGLE + day*FARE_DAY + week*FARE_WEEK; state.balance += income; s._visitedToday=true; addLog(`Picked ${totalPass} (S:${single} D:${day} W:${week}) +${money(income)}`); saveStateLocal(); updateUI(); } } }); }); }
+function getBusCapacity(){ if(!state.buses.length) return 40; const model=BUS_MODELS.find(m=>m.id===state.buses[0].modelId); return model?model.capacity:40; }
+let physTimer=null; function startPhysics(){ if(physTimer) return; physTimer=setInterval(()=>{ updatePhysics(); render(); },30);} function stopPhysics(){ if(physTimer){ clearInterval(physTimer); physTimer=null; } }
+window.addEventListener('keydown',(e)=>{ if(e.key==='ArrowUp'||e.key==='w') keys.up=true; if(e.key==='ArrowDown'||e.key==='s') keys.down=true; if(e.key==='ArrowLeft'||e.key==='a') keys.left=true; if(e.key==='ArrowRight'||e.key==='d') keys.right=true; }); window.addEventListener('keyup',(e)=>{ if(e.key==='ArrowUp'||e.key==='w') keys.up=false; if(e.key==='ArrowDown'||e.key==='s') keys.down=false; if(e.key==='ArrowLeft'||e.key==='a') keys.left=false; if(e.key==='ArrowRight'||e.key==='d') keys.right=false; });
+el('start-drive').addEventListener('click', ()=>{ addLog('Enter drive'); startPhysics(); }); el('stop-drive').addEventListener('click', ()=>{ addLog('Exit drive'); stopPhysics(); });
 
-/* ======= Map interactions ======= */
-let isPointerDown=false;
-canvas.addEventListener('pointerdown',(e)=>{
-  const rect = canvas.getBoundingClientRect();
-  const x = (e.clientX - rect.left) * (canvas.width/rect.width);
-  const y = (e.clientY - rect.top) * (canvas.height/rect.height);
-  if(state.drawingRoute){ state.currentEditedStops.push({x:Math.round(x),y:Math.round(y),expected: Number(el('route-expected').value||8)}); addLog('Added stop to current route'); saveState(); render(); return; }
-  // set bus position
-  state.busOnMap.x = x; state.busOnMap.y = y; addLog('Placed bus at map position'); saveState(); render();
-});
+/* Purchases UI */
+function updateUI(){ el('balance').textContent=money(Math.round(state.balance)); el('day').textContent=state.day; el('drivers').textContent=state.drivers; el('buses-count').textContent=state.buses.length; const buy=el('buy-bus-type'); buy.innerHTML=''; BUS_MODELS.forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=`${m.label} — £${m.price}`; buy.appendChild(o); }); }
 
-el('toggle-draw-route').addEventListener('click', ()=>{ state.drawingRoute = !state.drawingRoute; el('toggle-draw-route').textContent = state.drawingRoute? 'Stop Route Editor' : 'Start/Stop Route Editor'; if(!state.drawingRoute) render(); saveState(); });
-el('set-start').addEventListener('click', ()=>{ state.busOnMap.x = 150; state.busOnMap.y = 150; addLog('Bus reset to start position'); saveState(); render(); });
-el('reset-map').addEventListener('click', ()=>{ if(confirm('Reset all routes and bus position?')){ state.routes=[]; state.currentEditedStops=[]; state.busOnMap={x:150,y:150,angle:0,driving:false}; addLog('Map reset'); saveState(); render(); } });
+el('buy-bus').addEventListener('click', ()=>{ const sel=el('buy-bus-type').value; const model=BUS_MODELS.find(m=>m.id===sel); if(!model) return; const cost=model.price; const total=cost+MANAGEMENT_ACTION_COST; if(!confirm(`Buy ${model.label} for £${cost}? Management £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=cost; state.balance-=MANAGEMENT_ACTION_COST; const id=idNow('bus'); const name=`${model.id}-${state.buses.length+1}`; state.buses.push({id,modelId:model.id,name}); addLog('Bought '+name+' for '+money(cost)); saveStateLocal(); updateUI(); render(); });
+el('hire-driver').addEventListener('click', ()=>{ const total=MANAGEMENT_ACTION_COST+STAFF_WAGE_PER_DAY; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=MANAGEMENT_ACTION_COST; state.drivers+=1; addLog('Hired driver'); saveStateLocal(); updateUI(); });
 
-/* ======= Route save/assign ======= */
-el('save-route').addEventListener('click', ()=>{
-  if(state.currentEditedStops.length===0){ alert('Place at least one stop on the map first'); return; }
-  const rid = idNow('route');
-  const name = el('route-name').value || ('Route ' + (state.routes.length+1));
-  const expected = Number(el('route-expected').value) || 8;
-  state.routes.push({id:rid,name,stops: state.currentEditedStops.map(s=>({x:s.x,y:s.y,expected})),assignedBusId:null,expected});
-  state.currentEditedStops = [];
-  addLog('Saved route ' + name);
-  saveState(); render(); updateUI();
-});
+/* Logging */
+function addLog(txt){ const l=el('log'); const p=document.createElement('div'); p.textContent=`[Day ${state.day}] ${txt}`; l.prepend(p); state.log.unshift({day:state.day,text:txt}); }
 
-el('assign-bus').addEventListener('click', ()=>{
-  if(state.routes.length===0){ alert('No saved routes'); return; }
-  if(state.buses.length===0){ alert('No buses to assign'); return; }
-  // simple assign first bus to first route for MVP
-  const route = state.routes[0];
-  const bus = state.buses[0];
-  route.assignedBusId = bus.id;
-  addLog('Assigned bus '+bus.name+' to route '+route.name);
-  saveState(); updateUI(); render();
-});
-
-/* ======= Drive mechanics (manual steering) ======= */
-let keys = {up:false,down:false,left:false,right:false};
-const MAX_SPEED = 2.0; const ACC=0.06; const FRICTION=0.98;
-
-function updatePhysics(){
-  const b = state.busOnMap;
-  // apply controls
-  if(keys.up){ b.speed = Math.min(MAX_SPEED, b.speed + ACC); }
-  if(keys.down){ b.speed = Math.max(-MAX_SPEED/2, b.speed - ACC); }
-  if(!keys.up && !keys.down){ b.speed *= FRICTION; if(Math.abs(b.speed)<0.02) b.speed=0; }
-  if(keys.left){ b.angle -= 0.04; }
-  if(keys.right){ b.angle += 0.04; }
-  // move
-  b.x += Math.cos(b.angle) * b.speed * 1.8;
-  b.y += Math.sin(b.angle) * b.speed * 1.8;
-  // clamp
-  b.x = Math.max(10, Math.min(MAP_W-10, b.x));
-  b.y = Math.max(10, Math.min(MAP_H-10, b.y));
-  // detect stops
-  checkStopProximity();
-}
-
-function checkStopProximity(){
-  const b = state.busOnMap;
-  state.routes.forEach(route=>{
-    route.stops.forEach((s,idx)=>{
-      const dx=b.x-s.x, dy=b.y-s.y; const d=Math.sqrt(dx*dx+dy*dy);
-      if(d < 18){ // at stop
-        // board passengers once per arrival
-        if(!s._visitedToday){
-          const boarding = Math.min(Math.round(s.expected*(0.5+Math.random()*0.8)), getBusCapacity());
-          const income = boarding * FARE_PER_PASSENGER;
-          state.balance += income;
-          s._visitedToday = true;
-          addLog(`Picked up ${boarding} passengers at ${route.name} stop ${idx+1} — +${money(income)}`);
-          saveState(); updateUI();
-        }
-      }
-    });
-  });
-}
-
-function getBusCapacity(){ if(state.buses.length===0) return 40; const model = BUS_MODELS.find(m=>m.id===state.buses[0].modelId); return model ? model.capacity : 40; }
-
-let physicsTimer = null;
-function startPhysics(){ if(physicsTimer) return; physicsTimer = setInterval(()=>{ updatePhysics(); render(); }, 30); }
-function stopPhysics(){ if(physicsTimer){ clearInterval(physicsTimer); physicsTimer=null; } }
-
-/* keyboard controls */
-window.addEventListener('keydown', (e)=>{
-  if(e.key==='ArrowUp' || e.key==='w' || e.key==='W') keys.up=true;
-  if(e.key==='ArrowDown' || e.key==='s' || e.key==='S') keys.down=true;
-  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') keys.left=true;
-  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') keys.right=true;
-});
-window.addEventListener('keyup', (e)=>{
-  if(e.key==='ArrowUp' || e.key==='w' || e.key==='W') keys.up=false;
-  if(e.key==='ArrowDown' || e.key==='s' || e.key==='S') keys.down=false;
-  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') keys.left=false;
-  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') keys.right=false;
-});
-
-/* mobile joystick */
-['joy-up','joy-down','joy-left','joy-right'].forEach(id=>{
-  const elJoy = document.getElementById(id);
-  elJoy.addEventListener('pointerdown', ()=>{ if(id.endsWith('up')) keys.up=true; if(id.endsWith('down')) keys.down=true; if(id.endsWith('left')) keys.left=true; if(id.endsWith('right')) keys.right=true; startPhysics(); });
-  elJoy.addEventListener('pointerup', ()=>{ if(id.endsWith('up')) keys.up=false; if(id.endsWith('down')) keys.down=false; if(id.endsWith('left')) keys.left=false; if(id.endsWith('right')) keys.right=false; });
-  elJoy.addEventListener('pointercancel', ()=>{ if(id.endsWith('up')) keys.up=false; if(id.endsWith('down')) keys.down=false; if(id.endsWith('left')) keys.left=false; if(id.endsWith('right')) keys.right=false; });
-});
-
-/* start/stop drive buttons */
-el('start-drive').addEventListener('click', ()=>{ state.busOnMap.driving=true; addLog('Entered drive mode'); startPhysics(); saveState(); });
-el('stop-drive').addEventListener('click', ()=>{ state.busOnMap.driving=false; addLog('Exited drive mode'); stopPhysics(); saveState(); });
-
-/* mobile start/stop */
-el('mobile-start').addEventListener('click', ()=>{ el('start-drive').click(); });
-el('mobile-stop').addEventListener('click', ()=>{ el('stop-drive').click(); });
-
-/* ======= Purchases & company ======= */
-function updateUI(){ el('balance').textContent = money(Math.round(state.balance)); el('day').textContent = state.day; el('drivers').textContent = state.drivers; el('buses-count').textContent = state.buses.length; // buy dropdown
-  const buySel = el('buy-bus-type'); buySel.innerHTML=''; BUS_MODELS.forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=`${m.label} — £${m.price}`; buySel.appendChild(o); });
-}
-
-el('buy-bus').addEventListener('click', ()=>{
-  const sel = el('buy-bus-type').value; const model = BUS_MODELS.find(m=>m.id===sel); if(!model)return; const cost = model.price; const total = cost + MANAGEMENT_ACTION_COST; if(!confirm(`Buy ${model.label} for £${cost}? Management fee £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return; if(state.balance < total){ alert('Not enough funds'); return; } state.balance -= cost; state.balance -= MANAGEMENT_ACTION_COST; const id=idNow('bus'); const name = `${model.id}-${state.buses.length+1}`; state.buses.push({id,modelId:model.id,name}); addLog(`Bought bus ${name} for ${money(cost)} (management £${MANAGEMENT_ACTION_COST}).`); saveState(); updateUI(); render(); });
-
-el('hire-driver').addEventListener('click', ()=>{ const total = MANAGEMENT_ACTION_COST + STAFF_WAGE_PER_DAY; if(state.balance < total){ alert('Not enough funds'); return;} state.balance -= MANAGEMENT_ACTION_COST; state.drivers +=1; addLog('Hired driver (management £'+MANAGEMENT_ACTION_COST+').'); saveState(); updateUI(); });
-
-/* ======= Logging ======= */
-function addLog(txt){ const l=el('log'); const p=document.createElement('div'); p.textContent = `[Day ${state.day}] ${txt}`; l.prepend(p); state.log.unshift({day:state.day,text:txt}); }
-
-/* ======= Autosave/load on start ======= */
-loadState(); updateUI(); render();
-// Ensure busOnMap defaults
-if(!state.busOnMap) state.busOnMap = {x:150,y:150,angle:0,speed:0}; render();
-
-// periodic autosave
-setInterval(saveState, 30000);
-
-// ensure visited flags clear each day when simulate day is called (not implemented fully in MVP)
-
-/* ======= Simple daily advance (keeps wages, maintenance) ======= */
-el('advance-week')?.addEventListener('click', ()=>{ for(let i=0;i<7;i++) simulateDay(); });
-el('advance-day')?.addEventListener('click', simulateDay);
-function simulateDay(){ // wages and simple maintenance
-  const wages = state.drivers * STAFF_WAGE_PER_DAY;
-  const maintenance = state.buses.length * 5;
-  state.balance -= (wages + maintenance);
-  addLog(`Daily tick: wages £${wages}, maintenance £${maintenance}`);
-  state.day +=1; // clear visited
-  state.routes.forEach(r=> r.stops.forEach(s=> s._visitedToday = false));
-  saveState(); updateUI(); render();
-}
-
+/* Init */
+loadStateLocal(); updateUI(); render(); setInterval(saveStateLocal,30000);
 </script>
 </body>
 </html>
