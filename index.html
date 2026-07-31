@@ -14,6 +14,7 @@
   input[type=number]{width:80px}
   label{display:block;margin:6px 0;font-size:90%}
   .small{font-size:90%;color:#444}
+  #drive-panel{border:1px solid #cfc;padding:12px;border-radius:8px;background:#f7fff7;margin-top:12px}
 </style>
 </head>
 <body>
@@ -31,7 +32,7 @@
       <hr/>
       <button id="advance-day">Advance 1 day</button>
       <button id="advance-week">Advance 7 days</button>
-      <div class="small">Tip: add routes and assign buses to earn revenue each day.</div>
+      <div class="small">Tip: add routes and assign buses to earn revenue each day. You can also "Drive" a route yourself — open the Drive panel and complete runs manually.</div>
     </div>
 
     <div class="card" id="panel-buys">
@@ -61,10 +62,19 @@
       <button id="add-route">Add Route (unlocks cost £50 when first used)</button>
       <hr/>
       <table id="routes-table">
-        <thead><tr><th>Name</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Remove</th></tr></thead>
+        <thead><tr><th>Name</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Drive</th><th>Remove</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
+  </div>
+
+  <div id="drive-panel" style="display:none">
+    <h3>Drive Route</h3>
+    <div id="drive-info"></div>
+    <div>Runs left: <span id="drive-runs-left">0</span></div>
+    <button id="drive-run">Drive next run</button>
+    <button id="drive-finish">Finish driving (abandon)</button>
+    <div class="small">When you drive a run you guarantee the on-time bonus and increase passengers for that run.</div>
   </div>
 
   <div class="row" style="margin-top:12px">
@@ -119,7 +129,8 @@ let state = {
   buses: [], // {id, modelId, type, name}
   routes: [], // {id,name,freq,expected,assignedBusId}
   unlockedRoutes: 0,
-  log: []
+  log: [],
+  drivenRoutes: {} // routeId -> true if player drove it today (skip in auto-sim)
 };
 
 /* === UI helpers === */
@@ -163,9 +174,11 @@ function updateUI(){
   state.routes.forEach(r=>{
     const tr = document.createElement('tr');
     const assigned = state.buses.find(b=>b.id===r.assignedBusId);
+    const driveBtn = assigned ? `<button class="drive-btn" data-id="${r.id}">Drive</button>` : '';
     tr.innerHTML = `<td>${r.name}</td><td>${r.freq}m</td><td>${r.expected}</td>
       <td>${assigned ? assigned.name : '(no bus assigned)'}</td>
       <td>${r.lastPassengers ?? '-'}</td>
+      <td>${driveBtn}</td>
       <td><button data-id="${r.id}" class="remove-route">Remove</button></td>`;
     tbody.appendChild(tr);
   });
@@ -177,6 +190,14 @@ function updateUI(){
       state.routes = state.routes.filter(r=>r.id!==id);
       addLog(`Route removed: ${id}`);
       updateUI();
+    };
+  });
+
+  // bind drive buttons
+  document.querySelectorAll('.drive-btn').forEach(b=>{
+    b.onclick = e => {
+      const id = e.target.dataset.id;
+      openDrivePanel(id);
     };
   });
 }
@@ -235,6 +256,61 @@ function addRoute(){
   updateUI();
 }
 
+/* === Driving (player) === */
+let currentDrive = null; // {route, runsLeft, runsTotal}
+function openDrivePanel(routeId){
+  const route = state.routes.find(r=>r.id===routeId);
+  if(!route){ alert('Route not found'); return; }
+  if(!route.assignedBusId){ alert('No bus assigned to this route'); return; }
+  // compute runs for the day
+  const runs = Math.max(1, Math.floor(24*60 / Math.max(1, route.freq)));
+  currentDrive = {routeId: route.id, runsLeft: runs, runsTotal: runs};
+  el('drive-info').textContent = `${route.name} — ${route.expected} expected passengers per run.`;
+  el('drive-runs-left').textContent = currentDrive.runsLeft;
+  el('drive-panel').style.display = 'block';
+}
+
+function finishDriving(abandon=false){
+  if(currentDrive){
+    if(abandon){ addLog(`Stopped driving ${currentDrive.routeId} with ${currentDrive.runsLeft} runs left.`); }
+    else { addLog(`Finished driving ${currentDrive.routeId}.`); }
+    currentDrive = null;
+    el('drive-panel').style.display = 'none';
+    updateUI();
+  }
+}
+
+function driveOneRun(){
+  if(!currentDrive) return;
+  const route = state.routes.find(r=>r.id===currentDrive.routeId);
+  if(!route) return;
+  const bus = state.buses.find(b=>b.id===route.assignedBusId);
+  const model = BUS_MODELS.find(m=>m.id===bus.modelId);
+  // Driving gives +20% passengers and guarantees on-time bonus
+  const basePassengers = Math.max(0, Math.round(route.expected * (0.5 + Math.random()*0.8)));
+  const passengers = Math.round(basePassengers * 1.2);
+  // income
+  const income = passengers * ROUTE_EARNING_PER_PASSENGER + ROUTE_COMPLETION_BONUS + ON_TIME_BONUS;
+  // costs for this run
+  const costs = FUEL_COST_PER_ROUTE + MAINTENANCE_PER_ROUTE;
+  state.balance += income;
+  state.balance -= costs;
+  // mark that this route was driven today so auto-sim skips it
+  state.drivenRoutes[route.id] = true;
+  // track passengers
+  route.lastPassengers = (route.lastPassengers || 0) + passengers;
+  addLog(`You drove run on ${route.name}: passengers ${passengers}, income ${money(Math.round(income))}, costs ${money(Math.round(costs))}.`);
+
+  currentDrive.runsLeft -= 1;
+  el('drive-runs-left').textContent = currentDrive.runsLeft;
+  if(currentDrive.runsLeft <= 0){
+    addLog(`All runs completed for ${route.name} (you drove).`);
+    finishDriving(false);
+  } else {
+    updateUI();
+  }
+}
+
 /* === Simulation per day === */
 function simulateDay(){
   let income = 0;
@@ -255,6 +331,10 @@ function simulateDay(){
 
   // per-route costs & earnings
   state.routes.forEach(route => {
+    // skip routes that player already drove today (to avoid double count)
+    if(state.drivenRoutes[route.id]){
+      return;
+    }
     if(!route.assignedBusId){
       route.lastPassengers = 0;
       // still cost: maintenance per route and fuel per route
@@ -304,6 +384,9 @@ function simulateDay(){
   addLog(`Day ${state.day} results: Income ${money(Math.round(income))}, Costs ${money(Math.round(costs))}, Net ${money(Math.round(income - costs))}. Balance now ${money(Math.round(state.balance))}.`);
   state.day += 1;
 
+  // clear drivenRoutes at new day
+  state.drivenRoutes = {};
+
   updateUI();
 }
 
@@ -315,6 +398,9 @@ document.getElementById('buy-parking').addEventListener('click', buyParking);
 document.getElementById('add-route').addEventListener('click', addRoute);
 document.getElementById('advance-day').addEventListener('click', simulateDay);
 document.getElementById('advance-week').addEventListener('click', ()=>{ for(let i=0;i<7;i++) simulateDay(); });
+
+document.getElementById('drive-run').addEventListener('click', driveOneRun);
+document.getElementById('drive-finish').addEventListener('click', ()=>finishDriving(true));
 
 /* assign bus when dropdown changed in add-route form (user picks bus) */
 el('route-assign').addEventListener('change', ()=>{/* selection read on add */});
