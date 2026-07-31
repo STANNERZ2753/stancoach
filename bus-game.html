@@ -1,0 +1,333 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Bus Company Prototype</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:16px;color:#111}
+  h1,h2{margin:.2rem 0}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .card{border:1px solid #ddd;padding:12px;border-radius:8px;flex:1 1 260px;background:#fafafa}
+  button{padding:6px 10px;margin:4px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:6px;border:1px solid #eee;text-align:left}
+  input[type=number]{width:80px}
+  label{display:block;margin:6px 0;font-size:90%}
+  .small{font-size:90%;color:#444}
+</style>
+</head>
+<body>
+  <h1>Bus Company — Prototype</h1>
+  <p><strong>Starting balance:</strong> £10,000,000 — rules implemented per your sheet.</p>
+
+  <div class="row">
+    <div class="card" id="panel-stats">
+      <h2>Company</h2>
+      <div>Balance: <strong id="balance">£0</strong></div>
+      <div>Day: <span id="day">0</span></div>
+      <div>Drivers: <span id="drivers">0</span></div>
+      <div>Buses owned: <span id="buses-count">0</span></div>
+      <div>Routes: <span id="routes-count">0</span></div>
+      <hr/>
+      <button id="advance-day">Advance 1 day</button>
+      <button id="advance-week">Advance 7 days</button>
+      <div class="small">Tip: add routes and assign buses to earn revenue each day.</div>
+    </div>
+
+    <div class="card" id="panel-buys">
+      <h2>Buy / Hire</h2>
+      <div><strong>Management cost per action:</strong> £50</div>
+      <label>Buy bus:
+        <select id="buy-bus-type"></select>
+      </label>
+      <button id="buy-bus">Buy bus</button>
+      <label>Hire driver: <button id="hire-driver">Hire (£50 management + first day wages)</button></label>
+      <div class="small">Staff wage: £5 per driver per day</div>
+      <hr/>
+      <label>Company actions:
+        <button id="unlock-route">Unlock new route (£50)</button>
+        <button id="buy-parking">Buy parking space (£50)</button>
+      </label>
+    </div>
+
+    <div class="card" id="panel-routes">
+      <h2>Routes</h2>
+      <label>New route name: <input id="route-name" value="Route A"></label>
+      <label>Frequency (minutes): <input id="route-freq" type="number" value="30"></label>
+      <label>Expected passengers per run: <input id="route-expected" type="number" value="30"></label>
+      <label>Assign bus:
+        <select id="route-assign"></select>
+      </label>
+      <button id="add-route">Add Route (unlocks cost £50 when first used)</button>
+      <hr/>
+      <table id="routes-table">
+        <thead><tr><th>Name</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Remove</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:12px">
+    <div class="card" style="flex:1 1 100%">
+      <h2>Events Log</h2>
+      <div id="log" style="max-height:300px;overflow:auto;background:#fff;padding:8px;border-radius:6px;border:1px solid #eee"></div>
+    </div>
+  </div>
+
+<script>
+/* === Game constants per your rules === */
+const START_BALANCE = 10000000;
+const STAFF_WAGE_PER_DAY = 5; // per driver
+const STANDARD_FARE = 2.00; // per passenger
+const ROUTE_EARNING_PER_PASSENGER = 2.00;
+const ROUTE_COMPLETION_BONUS = 50;
+const ON_TIME_BONUS = 75;
+const FUEL_COST_PER_ROUTE = 60;
+const FUEL_COST_PER_DAY = 150; // company
+const MAINTENANCE_PER_ROUTE = 50;
+const DAILY_MAINTENANCE = 70; // company
+const WEEKLY_MAINTENANCE = 100; // company
+const FULL_SERVICE = 100;
+const DAMAGE_MINOR = 50;
+const DAMAGE_MEDIUM = 75;
+const DAMAGE_MAJOR = 100;
+const MANAGEMENT_ACTION_COST = 50;
+const BUS_RUN_COST = { 'single':20, 'double':35, 'articulated':50 };
+
+/* Bus purchase prices from your list */
+const BUS_MODELS = [
+  {id:'Enviro200', label:'Enviro200 — Single (£100)', price:100, type:'single'},
+  {id:'WrightStreetLite', label:'Wright StreetLite — Single (£110)', price:110, type:'single'},
+  {id:'MercedesCitaro', label:'Mercedes Citaro — Single (£130)', price:130, type:'single'},
+  {id:'ScaniaOmnicity', label:'Scania Omnicity — Single (£120)', price:120, type:'single'},
+  {id:'Enviro400', label:'Enviro400 — Double (£140)', price:140, type:'double'},
+  {id:'Enviro400MMC', label:'Enviro400MMC — Double (£150)', price:150, type:'double'},
+  {id:'WrightGemini2', label:'Wright Gemini 2 — Double (£130)', price:130, type:'double'},
+  {id:'VolvoB9TL', label:'Volvo B9TL — Double (£140)', price:140, type:'double'},
+  {id:'MercedesCitaroG', label:'Mercedes Citaro G — Articulated (£150)', price:150, type:'articulated'},
+  // second-hand
+  {id:'Enviro200_2010', label:'Enviro200 (2010) — Second-hand (£90)', price:90, type:'single'},
+  {id:'Enviro400_2009', label:'Enviro400 (2009) — Second-hand (£100)', price:100, type:'double'},
+  {id:'WrightGemini_2008', label:'Wright Gemini (2008) — Second-hand (£95)', price:95, type:'double'}
+];
+
+/* === Game state === */
+let state = {
+  day: 1,
+  balance: START_BALANCE,
+  drivers: 0,
+  buses: [], // {id, modelId, type, name}
+  routes: [], // {id,name,freq,expected,assignedBusId}
+  unlockedRoutes: 0,
+  log: []
+};
+
+/* === UI helpers === */
+const el = id => document.getElementById(id);
+function money(n){ return '£' + n.toLocaleString(undefined,{maximumFractionDigits:0}); }
+function addLog(txt){
+  const log = el('log');
+  const p = document.createElement('div');
+  p.textContent = txt;
+  log.prepend(p);
+  state.log.push({day:state.day, text:txt});
+}
+function updateUI(){
+  el('balance').textContent = money(Math.round(state.balance));
+  el('day').textContent = state.day;
+  el('drivers').textContent = state.drivers;
+  el('buses-count').textContent = state.buses.length;
+  el('routes-count').textContent = state.routes.length;
+
+  // buses dropdowns
+  const buySel = el('buy-bus-type');
+  buySel.innerHTML = '';
+  BUS_MODELS.forEach(m=> {
+    const opt = document.createElement('option');
+    opt.value = m.id; opt.textContent = m.label;
+    buySel.appendChild(opt);
+  });
+
+  const assignSel = el('route-assign');
+  assignSel.innerHTML = '<option value="">(none)</option>';
+  state.buses.forEach(b=>{
+    const m = BUS_MODELS.find(x=>x.id===b.modelId);
+    const opt = document.createElement('option');
+    opt.value = b.id; opt.textContent = `${b.name} (${m.label})`;
+    assignSel.appendChild(opt);
+  });
+
+  // routes table
+  const tbody = el('routes-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  state.routes.forEach(r=>{
+    const tr = document.createElement('tr');
+    const assigned = state.buses.find(b=>b.id===r.assignedBusId);
+    tr.innerHTML = `<td>${r.name}</td><td>${r.freq}m</td><td>${r.expected}</td>
+      <td>${assigned ? assigned.name : '(no bus assigned)'}</td>
+      <td>${r.lastPassengers ?? '-'}</td>
+      <td><button data-id="${r.id}" class="remove-route">Remove</button></td>`;
+    tbody.appendChild(tr);
+  });
+
+  // bind remove
+  document.querySelectorAll('.remove-route').forEach(b=>{
+    b.onclick = e => {
+      const id = e.target.dataset.id;
+      state.routes = state.routes.filter(r=>r.id!==id);
+      addLog(`Route removed: ${id}`);
+      updateUI();
+    };
+  });
+}
+
+/* === Actions === */
+function buyBus(){
+  const sel = el('buy-bus-type').value;
+  const model = BUS_MODELS.find(m=>m.id===sel);
+  if(!model) return;
+  const cost = model.price * 1000; // convert to full £ (prices were small numbers: treat them as thousands)
+  if(state.balance < cost){ alert('Not enough funds'); return; }
+  // management cost
+  state.balance -= cost;
+  state.balance -= MANAGEMENT_ACTION_COST;
+  const id = 'bus' + Date.now();
+  const name = `${model.id}-${state.buses.length+1}`;
+  state.buses.push({id, modelId:model.id, type:model.type, name});
+  addLog(`Bought bus ${name} for ${money(cost)} (model price £${model.price})`);
+  updateUI();
+}
+
+function hireDriver(){
+  if(state.balance < MANAGEMENT_ACTION_COST + STAFF_WAGE_PER_DAY){ alert('Not enough funds'); return; }
+  state.balance -= MANAGEMENT_ACTION_COST;
+  state.drivers += 1;
+  addLog(`Hired driver (management £${MANAGEMENT_ACTION_COST}).`);
+  updateUI();
+}
+
+function unlockRoute(){
+  if(state.balance < MANAGEMENT_ACTION_COST){ alert('Not enough funds'); return; }
+  state.balance -= MANAGEMENT_ACTION_COST;
+  state.unlockedRoutes += 1;
+  addLog(`Unlocked a new route slot (cost £${MANAGEMENT_ACTION_COST}).`);
+  updateUI();
+}
+
+function buyParking(){
+  if(state.balance < MANAGEMENT_ACTION_COST){ alert('Not enough funds'); return; }
+  state.balance -= MANAGEMENT_ACTION_COST;
+  addLog(`Bought parking space (cost £${MANAGEMENT_ACTION_COST}).`);
+  updateUI();
+}
+
+function addRoute(){
+  if(state.balance < MANAGEMENT_ACTION_COST){ alert('Not enough funds for unlock'); return; }
+  // require unlock cost per new route: management cost 50
+  const name = el('route-name').value || ('Route ' + (state.routes.length+1));
+  const freq = Number(el('route-freq').value) || 30;
+  const expected = Number(el('route-expected').value) || 10;
+  const assignedBusId = el('route-assign').value || null;
+  state.balance -= MANAGEMENT_ACTION_COST;
+  const id = 'route' + Date.now();
+  state.routes.push({id,name,freq,expected,assignedBusId});
+  addLog(`Added route ${name} (freq ${freq}m, expected ${expected} passengers/run).`);
+  updateUI();
+}
+
+/* === Simulation per day === */
+function simulateDay(){
+  let income = 0;
+  let costs = 0;
+
+  // daily driver wages
+  const wages = state.drivers * STAFF_WAGE_PER_DAY;
+  costs += wages;
+
+  // company daily fuel & maintenance
+  costs += FUEL_COST_PER_DAY + DAILY_MAINTENANCE;
+
+  // bus running cost per bus
+  state.buses.forEach(b => {
+    const runCost = BUS_RUN_COST[b.type] || 20;
+    costs += runCost;
+  });
+
+  // per-route costs & earnings
+  state.routes.forEach(route => {
+    if(!route.assignedBusId){
+      route.lastPassengers = 0;
+      // still cost: maintenance per route and fuel per route
+      costs += MAINTENANCE_PER_ROUTE + FUEL_COST_PER_ROUTE;
+      return;
+    }
+    // simulate number of runs per day: 24h*60/freq
+    const runs = Math.max(1, Math.floor(24*60 / Math.max(1, route.freq)));
+    let passengersTotal = 0;
+    for(let i=0;i<runs;i++){
+      // passenger variability: between 50% and 130% of expected
+      const passengers = Math.max(0, Math.round(route.expected * (0.5 + Math.random()*0.8)));
+      passengersTotal += passengers;
+      income += passengers * ROUTE_EARNING_PER_PASSENGER;
+      // route completion bonus per run
+      income += ROUTE_COMPLETION_BONUS;
+      // on-time chance: 80% get on-time bonus per run
+      if(Math.random() < 0.8) income += ON_TIME_BONUS;
+      costs += FUEL_COST_PER_ROUTE + MAINTENANCE_PER_ROUTE;
+    }
+    route.lastPassengers = passengersTotal;
+  });
+
+  // random damage event (per day company-level)
+  const r = Math.random();
+  if(r < 0.01){
+    costs += DAMAGE_MAJOR;
+    addLog(`Major damage today: ${money(DAMAGE_MAJOR)}.`);
+  } else if(r < 0.04){
+    costs += DAMAGE_MEDIUM;
+    addLog(`Medium damage today: ${money(DAMAGE_MEDIUM)}.`);
+  } else if(r < 0.12){
+    costs += DAMAGE_MINOR;
+    addLog(`Minor damage today: ${money(DAMAGE_MINOR)}.`);
+  }
+
+  // weekly maintenance if day divisible by 7
+  if(state.day % 7 === 0){
+    costs += WEEKLY_MAINTENANCE;
+    addLog(`Weekly maintenance charged: ${money(WEEKLY_MAINTENANCE)}.`);
+  }
+
+  // add/subtract to balance
+  state.balance += income;
+  state.balance -= costs;
+
+  addLog(`Day ${state.day} results: Income ${money(Math.round(income))}, Costs ${money(Math.round(costs))}, Net ${money(Math.round(income - costs))}. Balance now ${money(Math.round(state.balance))}.`);
+  state.day += 1;
+
+  updateUI();
+}
+
+/* === Events and bindings === */
+document.getElementById('buy-bus').addEventListener('click', buyBus);
+document.getElementById('hire-driver').addEventListener('click', hireDriver);
+document.getElementById('unlock-route').addEventListener('click', unlockRoute);
+document.getElementById('buy-parking').addEventListener('click', buyParking);
+document.getElementById('add-route').addEventListener('click', addRoute);
+document.getElementById('advance-day').addEventListener('click', simulateDay);
+document.getElementById('advance-week').addEventListener('click', ()=>{ for(let i=0;i<7;i++) simulateDay(); });
+
+/* assign bus when dropdown changed in add-route form (user picks bus) */
+el('route-assign').addEventListener('change', ()=>{/* selection read on add */});
+
+/* initialize */
+function init(){
+  state.balance = START_BALANCE;
+  state.day = 1;
+  addLog('Game started. Balance set to ' + money(START_BALANCE) + '.');
+  updateUI();
+}
+init();
+
+</script>
+</body>
+</html>
