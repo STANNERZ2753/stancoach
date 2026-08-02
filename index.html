@@ -15,8 +15,8 @@
   label{display:block;margin:6px 0;font-size:90%}
   input[type=number],input[type=text],select{padding:6px;border-radius:6px;border:1px solid #ddd}
   #map-wrap{width:100%;max-width:900px;position:relative}
-  /* static map background from OpenStreetMap static service centered on Herefordshire */
-  #map-wrap{background-image:url('https://staticmap.openstreetmap.de/staticmap.php?center=52.0567,-2.7166&zoom=10&size=900x540');background-size:cover;background-position:center;border-radius:6px}
+  /* Removed external static image to avoid CDN blocking; use subtle background color so driving works reliably */
+  #map-wrap{background-color:#e9f3ff;border-radius:6px}
   canvas{width:100%;height:auto;border:1px solid #ddd;background:transparent;border-radius:6px;position:relative;display:block}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
   .log{max-height:220px;overflow:auto;padding:8px;background:#fff;border-radius:8px;border:1px solid #eee}
@@ -28,7 +28,7 @@
 </head>
 <body>
   <h1>Bus Company — Simulator (Rapid Demo)</h1>
-  <p class="small">Rapid demo: manual driving on a static Herefordshire map image, basic economy, preset routes only. More routes added during development.</p>
+  <p class="small">Rapid demo: manual driving on a static Herefordshire-style background, basic economy, preset routes only. This build will force-load presets to avoid old local saves blocking gameplay.</p>
 
   <div class="row">
     <div class="card col">
@@ -39,7 +39,7 @@
         <button id="start-drive">Enter Drive Mode</button>
         <button id="stop-drive">Exit Drive Mode</button>
       </div>
-      <div class="small">Preset routes are loaded from the Company panel. Click the "Load presets" button in Company to force reload if you have an old save. Place a bus, enter drive mode and visit stops to pick up passengers.</div>
+      <div class="small">Preset routes are loaded from the Company panel. If you previously had an old save blocking presets, this build clears it on load. Place a bus, enter drive mode and visit stops to pick up passengers.</div>
     </div>
 
     <div class="card col">
@@ -176,8 +176,8 @@ let currentDrive=null; function openDrivePanel(routeId){ const route = state.rou
 /* Logging */
 function addLog(txt){ const l=el('log'); const p=document.createElement('div'); p.textContent=`[Day ${state.day}] ${txt}`; l.prepend(p); state.log.unshift({day:state.day,text:txt}); }
 
-/* Init - load presets if empty */
-function init(){ loadStateLocal(); loadPresetRoutes(false); updateUI(); render(); setInterval(saveStateLocal,30000); addLog('Game initialized with preset routes.'); }
+/* Init - force clear old save and load presets */
+function init(){ try{ localStorage.removeItem('stancoach_v1'); addLog('Cleared old local save'); }catch(e){} loadPresetRoutes(true); updateUI(); render(); setInterval(saveStateLocal,30000); addLog('Game initialized with preset routes.'); }
 init();
 </script>
 </body>
