@@ -15,7 +15,6 @@
   label{display:block;margin:6px 0;font-size:90%}
   input[type=number],input[type=text],select{padding:6px;border-radius:6px;border:1px solid #ddd}
   #map-wrap{width:100%;max-width:900px;position:relative}
-  /* Removed external static image to avoid CDN blocking; use subtle background color so driving works reliably */
   #map-wrap{background-color:#e9f3ff;border-radius:6px}
   canvas{width:100%;height:auto;border:1px solid #ddd;background:transparent;border-radius:6px;position:relative;display:block}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -28,7 +27,7 @@
 </head>
 <body>
   <h1>Bus Company — Simulator (Rapid Demo)</h1>
-  <p class="small">Rapid demo: manual driving on a static Herefordshire-style background, basic economy, preset routes only. This build will force-load presets to avoid old local saves blocking gameplay. New: Auto-run (route-follow) mode added.</p>
+  <p class="small">Rapid demo: manual driving or Auto-run. You can hire drivers and assign them to buses; you can also assign buses to routes.</p>
 
   <div class="row">
     <div class="card col">
@@ -41,27 +40,27 @@
         <button id="start-auto">Start Auto-Run</button>
         <button id="stop-auto">Stop Auto-Run</button>
       </div>
-      <div class="small">Place a bus (click map) or buy one, then either drive manually or start Auto-Run for a chosen route.</div>
+      <div class="small">Place a bus (click map) or buy one, then either drive manually or start Auto-Run for a route.</div>
     </div>
 
     <div class="card col">
       <h2>Company</h2>
       <div>Balance: <strong id="balance">£0</strong></div>
       <div>Day: <span id="day">0</span></div>
-      <div>Drivers: <span id="drivers">0</span></div>
+      <div>Drivers: <span id="drivers-count">0</span></div>
       <div>Buses owned: <span id="buses-count">0</span></div>
       <hr />
 
       <h3>Buy / Hire</h3>
       <label>Buy bus model: <select id="buy-bus-type"></select></label>
-      <div style="display:flex;gap:8px"><button id="buy-bus">Buy bus</button><button id="hire-driver">Hire driver</button></div>
-      <div class="small">Management fee per action £50. Driver wage £5/day.</div>
+      <div style="display:flex;gap:8px"><button id="buy-bus">Buy bus</button><button id="hire-driver">Hire driver</button><button id="assign-driver">Assign driver</button></div>
+      <div class="small">Management fee per action £50. Driver wage £5/day. When hiring you can optionally assign the new driver to a bus and assign that bus to a route.</div>
 
       <hr />
       <h3>Routes (preloaded)</h3>
       <div style="display:flex;gap:8px;margin-bottom:6px"><button id="load-presets">Load preset routes</button><button id="assign-bus">Assign Bus to Route</button></div>
-      <div class="small">These routes are based on towns in Herefordshire. You can assign buses, drive them, or start Auto-Run to follow a route automatically.</div>
-      <table id="routes-table" style="width:100%;margin-top:8px"><thead><tr><th>Name</th><th>Location</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Actions</th></tr></thead><tbody></tbody></table>
+      <div class="small">These routes are based on towns in Herefordshire. You can assign buses, drivers, drive them, or start Auto-Run to follow a route automatically.</div>
+      <table id="routes-table" style="width:100%;margin-top:8px"><thead><tr><th>Name</th><th>Location</th><th>Freq</th><th>Expected</th><th>Bus (driver)</th><th>Passengers today</th><th>Actions</th></tr></thead><tbody></tbody></table>
 
       <hr />
       <h3>Tickets (demo)</h3>
@@ -122,23 +121,27 @@ const PRESET_ROUTES = [
   { id: 'hereford-townloop', name: 'Hereford Town Loop', location: 'Herefordshire', freq: 20, expected: 30, stops: [ {x:460,y:280, expected:30}, {x:480,y:260, expected:25}, {x:440,y:260, expected:20} ] }
 ];
 
-let state = { day:1, balance:START_BALANCE, drivers:0, buses:[], routes:[], busOnMap:{x:150,y:150,angle:0,speed:0}, drawingRoute:false, currentEditedStops:[], log:[] };
+let state = { day:1, balance:START_BALANCE, drivers:[], buses:[], routes:[], busOnMap:{x:150,y:150,angle:0,speed:0}, drawingRoute:false, currentEditedStops:[], log:[] };
 
 const el = id=>document.getElementById(id);
 function money(n){return '£'+Number(n).toLocaleString();}
 function idNow(p){return p+Date.now().toString(36);} 
 
 /* Auto-run state */
-let autoRun = null; // { routeId, stopIndex, looping }
+let autoRun = null; // { routeId, stopIndex, looping, active }
 
 /* Save/Load/Export/Import */
 function saveStateLocal(){ try{ localStorage.setItem('stancoach_v1', JSON.stringify(state)); addLog('Saved locally'); }catch(e){addLog('Save failed');} }
-function loadStateLocal(){ try{ const s=localStorage.getItem('stancoach_v1'); if(s){ state = JSON.parse(s); addLog('Loaded local save'); updateUI(); render(); } else addLog('No local save found'); }catch(e){addLog('Load failed');} }
+function loadStateLocal(){ try{ const s=localStorage.getItem('stancoach_v1'); if(s){ const parsed = JSON.parse(s);
+    // maintain backwards compatibility if drivers is a number
+    if(Array.isArray(parsed.drivers)){ state = parsed; } else { state = parsed; if(typeof state.drivers === 'number'){ state.drivers = Array.from({length: state.drivers}, (_,i)=>({ id: idNow('drv'), name: 'Driver '+(i+1), assignedBusId: null })); } }
+    addLog('Loaded local save'); updateUI(); render(); } else addLog('No local save found'); }catch(e){addLog('Load failed');} }
 function exportJSON(){ const data = JSON.stringify(state); const blob = new Blob([data],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download='stancoach-save.json'; a.click(); URL.revokeObjectURL(url); addLog('Exported JSON'); }
 el('btn-export').addEventListener('click', exportJSON);
 el('btn-save').addEventListener('click', saveStateLocal);
 el('btn-load').addEventListener('click', loadStateLocal);
-el('import-file').addEventListener('change', (ev)=>{ const f=ev.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=e=>{ try{ state=JSON.parse(e.target.result); addLog('Imported save'); updateUI(); render(); saveStateLocal(); }catch(err){ addLog('Import failed'); } }; r.readAsText(f); });
+el('import-file').addEventListener('change', (ev)=>{ const f=ev.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=e=>{ try{ const parsed = JSON.parse(e.target.result); state = parsed; // ensure drivers array
+      if(typeof state.drivers === 'number') state.drivers = []; addLog('Imported save'); updateUI(); render(); saveStateLocal(); }catch(err){ addLog('Import failed'); } }; r.readAsText(f); });
 
 /* Map/Canvas */
 const canvas=el('map'); const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height;
@@ -153,7 +156,7 @@ canvas.addEventListener('pointerdown', (e)=>{ const rect=canvas.getBoundingClien
 /* Route helpers */
 function loadPresetRoutes(force=false){ if(!force && state.routes && state.routes.length>0) return; state.routes = []; PRESET_ROUTES.forEach(r=>{ const nid = idNow('route'); state.routes.push({ id: nid, name: r.name, location: r.location, freq: r.freq, expected: r.expected, stops: r.stops.map(s=>({ x: s.x, y: s.y, expected: s.expected, _visitedToday:false })), assignedBusId: null, lastPassengers: 0 }); }); addLog('Loaded preset Herefordshire routes'); saveStateLocal(); }
 
-function updateUI(){ el('balance').textContent=money(Math.round(state.balance)); el('day').textContent=state.day; el('drivers').textContent=state.drivers; el('buses-count').textContent=state.buses.length; const routesTable = document.getElementById('routes-table').querySelector('tbody'); routesTable.innerHTML=''; state.routes.forEach((r,idx)=>{ const assigned = state.buses.find(b=>b.id===r.assignedBusId); const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.name}</td><td>${r.location || ''}</td><td>${r.freq}m</td><td>${r.expected||'-'}</td><td>${assigned?assigned.name:'(none)'}</td><td>${r.lastPassengers||'-'}</td><td><button class="drive-btn" data-id="${r.id}">Manual</button> <button class="autorun-btn" data-id="${r.id}">Auto</button></td>`; routesTable.appendChild(tr); });
+function updateUI(){ el('balance').textContent=money(Math.round(state.balance)); el('day').textContent=state.day; el('drivers-count').textContent=state.drivers.length; el('buses-count').textContent=state.buses.length; const routesTable = document.getElementById('routes-table').querySelector('tbody'); routesTable.innerHTML=''; state.routes.forEach((r,idx)=>{ const assignedBus = state.buses.find(b=>b.id===r.assignedBusId); const driver = assignedBus? state.drivers.find(d=>d.id===assignedBus.driverId) : null; const busLabel = assignedBus? `${assignedBus.name}${driver? ' ('+driver.name+')':''}` : '(none)'; const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.name}</td><td>${r.location || ''}</td><td>${r.freq}m</td><td>${r.expected||'-'}</td><td>${busLabel}</td><td>${r.lastPassengers||'-'}</td><td><button class="drive-btn" data-id="${r.id}">Manual</button> <button class="autorun-btn" data-id="${r.id}">Auto</button></td>`; routesTable.appendChild(tr); });
   document.querySelectorAll('.drive-btn').forEach(b=>{ b.onclick = e=> openDrivePanel(e.target.dataset.id); });
   document.querySelectorAll('.autorun-btn').forEach(b=>{ b.onclick = e=> startAutoRun(e.target.dataset.id); });
   const buy=el('buy-bus-type'); buy.innerHTML=''; BUS_MODELS.forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=`${m.label} — £${m.price}`; buy.appendChild(o); }); }
@@ -206,8 +209,43 @@ el('start-drive').addEventListener('click', ()=>{ addLog('Enter drive'); // ensu
   stopAutoRun(); startPhysics(); }); el('stop-drive').addEventListener('click', ()=>{ addLog('Exit drive'); stopPhysics(); });
 
 /* Purchases UI */
-el('buy-bus').addEventListener('click', ()=>{ const sel=el('buy-bus-type').value; const model=BUS_MODELS.find(m=>m.id===sel); if(!model) return; const cost=model.price; const total=cost+MANAGEMENT_ACTION_COST; if(!confirm(`Buy ${model.label} for £${cost}? Management £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=cost; state.balance-=MANAGEMENT_ACTION_COST; const id=idNow('bus'); const name=`${model.id}-${state.buses.length+1}`; state.buses.push({id,modelId:model.id,name}); addLog('Bought '+name+' for '+money(cost)); saveStateLocal(); updateUI(); render(); });
-el('hire-driver').addEventListener('click', ()=>{ const total=MANAGEMENT_ACTION_COST+STAFF_WAGE_PER_DAY; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=MANAGEMENT_ACTION_COST; state.drivers+=1; addLog('Hired driver'); saveStateLocal(); updateUI(); });
+el('buy-bus').addEventListener('click', ()=>{ const sel=el('buy-bus-type').value; const model=BUS_MODELS.find(m=>m.id===sel); if(!model) return; const cost=model.price; const total=cost+MANAGEMENT_ACTION_COST; if(!confirm(`Buy ${model.label} for £${cost}? Management £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=cost; state.balance-=MANAGEMENT_ACTION_COST; const id=idNow('bus'); const name=`${model.id}-${state.buses.length+1}`; state.buses.push({id,modelId:model.id,name,driverId:null}); addLog('Bought '+name+' for '+money(cost)); saveStateLocal(); updateUI(); render(); });
+
+// Hire driver and optionally assign to bus and route
+el('hire-driver').addEventListener('click', ()=>{
+  const totalCost = MANAGEMENT_ACTION_COST + STAFF_WAGE_PER_DAY;
+  if(state.balance < totalCost){ alert('Not enough funds to hire'); return; }
+  state.balance -= MANAGEMENT_ACTION_COST; // charge management fee
+  // create driver object
+  const did = idNow('drv'); const dname = 'Driver '+(state.drivers.length+1);
+  const driver = { id: did, name: dname, assignedBusId: null };
+  state.drivers.push(driver);
+  addLog('Hired driver '+dname);
+  // prompt to assign to a bus
+  if(state.buses.length>0 && confirm('Assign this driver to a bus now?')){
+    const busNames = state.buses.map((b,i)=>`${i+1}: ${b.name}`).join('\n'); const bsel = prompt('Pick bus by number:\n'+busNames); const bi = parseInt(bsel)-1; if(!isNaN(bi) && state.buses[bi]){ const bus = state.buses[bi]; driver.assignedBusId = bus.id; bus.driverId = driver.id; addLog(`Assigned ${driver.name} → ${bus.name}`);
+      // prompt to assign that bus to a route
+      if(state.routes.length>0 && confirm('Assign that bus to a route now?')){
+        const routeNames = state.routes.map((r,i)=>`${i+1}: ${r.name}`).join('\n'); const rsel = prompt('Pick route by number:\n'+routeNames); const ri = parseInt(rsel)-1; if(!isNaN(ri) && state.routes[ri]){ state.routes[ri].assignedBusId = bus.id; addLog(`Assigned ${bus.name} → ${state.routes[ri].name}`); }
+      }
+    }
+  }
+  saveStateLocal(); updateUI(); render();
+});
+
+// Manual assign driver to bus
+el('assign-driver').addEventListener('click', ()=>{
+  if(state.drivers.length===0){ alert('No drivers hired'); return; }
+  if(state.buses.length===0){ alert('No buses purchased'); return; }
+  const drvNames = state.drivers.map((d,i)=>`${i+1}: ${d.name}${d.assignedBusId? ' (assigned)':''}`).join('\n'); const ds = prompt('Pick driver by number:\n'+drvNames); const di = parseInt(ds)-1; if(isNaN(di)||!state.drivers[di]) return; const drv = state.drivers[di]; const busNames = state.buses.map((b,i)=>`${i+1}: ${b.name}${b.driverId? ' ('+ (state.drivers.find(dd=>dd.id===b.driverId)?.name||'driver') +')':''}`).join('\n'); const bs = prompt('Pick bus by number to assign to driver '+drv.name+':\n'+busNames); const bi = parseInt(bs)-1; if(isNaN(bi)||!state.buses[bi]) return; // clear previous assignment
+  if(drv.assignedBusId){ const oldBus = state.buses.find(b=>b.id===drv.assignedBusId); if(oldBus) oldBus.driverId = null; }
+  drv.assignedBusId = state.buses[bi].id; state.buses[bi].driverId = drv.id; addLog(`Assigned ${drv.name} → ${state.buses[bi].name}`);
+  saveStateLocal(); updateUI(); render();
+});
+
+el('hire-driver').addEventListener('contextmenu', (e)=>{ e.preventDefault(); alert('Hint: right-click Hire driver to hire without assignment'); });
+
+el('assign-bus').addEventListener('click', ()=>{ if(!state.routes.length){ alert('No routes'); return;} if(!state.buses.length){ alert('Buy a bus first'); return;} const routeNames = state.routes.map((r,i)=>`${i+1}: ${r.name}`).join('\n'); const busNames = state.buses.map((b,i)=>`${i+1}: ${b.name}`).join('\n'); const rsel = prompt('Pick route by number:\n'+routeNames); const bsel = prompt('Pick bus by number:\n'+busNames); const ri = parseInt(rsel)-1; const bi = parseInt(bsel)-1; if(isNaN(ri)||isNaN(bi)||!state.routes[ri]||!state.buses[bi]){ alert('Invalid selection'); return;} state.routes[ri].assignedBusId = state.buses[bi].id; addLog('Assigned '+state.buses[bi].name+' → '+state.routes[ri].name); saveStateLocal(); updateUI(); render(); });
 
 /* Auto-run control functions */
 function startAutoRun(routeId, opts={loop:false}){
@@ -221,7 +259,6 @@ function startAutoRun(routeId, opts={loop:false}){
 }
 function stopAutoRun(){ if(autoRun){ addLog('Auto-run stopped'); autoRun=null; } }
 
-// UI hook for start-auto button: prompt for route number
 el('start-auto').addEventListener('click', ()=>{
   if(!state.routes.length){ alert('No routes loaded'); return; }
   const routeNames = state.routes.map((r,i)=>`${i+1}: ${r.name}`).join('\n'); const sel = prompt('Start Auto-Run: pick route by number:\n'+routeNames+'\n(append L to loop, e.g. 1L)'); if(!sel) return; const loop = /L$/i.test(sel.trim()); const num = parseInt(sel,10); if(isNaN(num)||num<1||num>state.routes.length){ alert('Invalid route'); return;} const r = state.routes[num-1]; startAutoRun(r.id,{loop});
