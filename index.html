@@ -28,7 +28,7 @@
 </head>
 <body>
   <h1>Bus Company — Simulator (Rapid Demo)</h1>
-  <p class="small">Rapid demo: manual driving on a static Herefordshire-style background, basic economy, preset routes only. This build will force-load presets to avoid old local saves blocking gameplay.</p>
+  <p class="small">Rapid demo: manual driving on a static Herefordshire-style background, basic economy, preset routes only. This build will force-load presets to avoid old local saves blocking gameplay. New: Auto-run (route-follow) mode added.</p>
 
   <div class="row">
     <div class="card col">
@@ -38,8 +38,10 @@
         <button id="set-start">Reset Bus Pos</button>
         <button id="start-drive">Enter Drive Mode</button>
         <button id="stop-drive">Exit Drive Mode</button>
+        <button id="start-auto">Start Auto-Run</button>
+        <button id="stop-auto">Stop Auto-Run</button>
       </div>
-      <div class="small">Preset routes are loaded from the Company panel. If you previously had an old save blocking presets, this build clears it on load. Place a bus, enter drive mode and visit stops to pick up passengers.</div>
+      <div class="small">Place a bus (click map) or buy one, then either drive manually or start Auto-Run for a chosen route.</div>
     </div>
 
     <div class="card col">
@@ -58,8 +60,8 @@
       <hr />
       <h3>Routes (preloaded)</h3>
       <div style="display:flex;gap:8px;margin-bottom:6px"><button id="load-presets">Load preset routes</button><button id="assign-bus">Assign Bus to Route</button></div>
-      <div class="small">These routes are based on towns in Herefordshire. You can assign buses and drive them. More routes will be added during development.</div>
-      <table id="routes-table" style="width:100%;margin-top:8px"><thead><tr><th>Name</th><th>Location</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Drive</th></tr></thead><tbody></tbody></table>
+      <div class="small">These routes are based on towns in Herefordshire. You can assign buses, drive them, or start Auto-Run to follow a route automatically.</div>
+      <table id="routes-table" style="width:100%;margin-top:8px"><thead><tr><th>Name</th><th>Location</th><th>Freq</th><th>Expected</th><th>Bus</th><th>Passengers today</th><th>Actions</th></tr></thead><tbody></tbody></table>
 
       <hr />
       <h3>Tickets (demo)</h3>
@@ -87,37 +89,37 @@ const FARE_SINGLE = 2; const FARE_DAY = 5; const FARE_WEEK = 20;
 
 const BUS_MODELS = [ {id:'Enviro200',label:'Enviro200',price:95,capacity:40}, {id:'WrightLite',label:'Wright Lite',price:110,capacity:38} ];
 
-// 35 Preset Herefordshire routes (approximate map coordinates on the canvas 900x540)
+// Preset Herefordshire routes (approx canvas coords 900x540)
 const PRESET_ROUTES = [
-  { id: 'hereford-leominster', name: 'Hereford — Leominster', location: 'Herefordshire', freq: 60, expected: 18, stops: [ {x:460,y:280, expected:18}, {x:380,y:160, expected:12} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-ross', name: 'Hereford — Ross-on-Wye', location: 'Herefordshire', freq: 45, expected: 22, stops: [ {x:460,y:280, expected:22}, {x:620,y:360, expected:18} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-ledbury', name: 'Hereford — Ledbury', location: 'Herefordshire', freq: 30, expected: 20, stops: [ {x:460,y:280, expected:20}, {x:570,y:200, expected:15} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'bromyard-kingston', name: 'Bromyard — Kington', location: 'Herefordshire', freq: 120, expected: 10, stops: [ {x:520,y:160, expected:10}, {x:240,y:120, expected:8} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'leominster-kington', name: 'Leominster — Kington', location: 'Herefordshire', freq: 90, expected: 9, stops: [ {x:380,y:160, expected:9}, {x:240,y:120, expected:7} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'ledbury-ross', name: 'Ledbury — Ross-on-Wye', location: 'Herefordshire', freq: 50, expected: 14, stops: [ {x:570,y:200, expected:14}, {x:620,y:360, expected:12} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-hay', name: 'Hereford — Hay-on-Wye', location: 'Herefordshire', freq: 180, expected: 8, stops: [ {x:460,y:280, expected:8}, {x:700,y:120, expected:6} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-weobley', name: 'Hereford — Weobley', location: 'Herefordshire', freq: 120, expected: 6, stops: [ {x:460,y:280, expected:6}, {x:420,y:220, expected:5} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-pembridge', name: 'Hereford — Pembridge', location: 'Herefordshire', freq: 100, expected: 7, stops: [ {x:460,y:280, expected:7}, {x:300,y:240, expected:5} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-bromyard', name: 'Hereford — Bromyard', location: 'Herefordshire', freq: 40, expected: 12, stops: [ {x:460,y:280, expected:12}, {x:520,y:160, expected:10} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'ross-ledbury', name: 'Ross-on-Wye — Ledbury', location: 'Herefordshire', freq: 70, expected: 9, stops: [ {x:620,y:360, expected:9}, {x:570,y:200, expected:8} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'ross-hay', name: 'Ross-on-Wye — Hay-on-Wye', location: 'Herefordshire', freq: 160, expected: 6, stops: [ {x:620,y:360, expected:6}, {x:700,y:120, expected:5} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'ledbury-pembridge', name: 'Ledbury — Pembridge', location: 'Herefordshire', freq: 110, expected: 5, stops: [ {x:570,y:200, expected:5}, {x:300,y:240, expected:4} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'kingsland-kington', name: 'Kingsland — Kington', location: 'Herefordshire', freq: 140, expected: 4, stops: [ {x:260,y:140, expected:4}, {x:240,y:120, expected:4} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'bromyard-ledbury', name: 'Bromyard — Ledbury', location: 'Herefordshire', freq: 95, expected: 7, stops: [ {x:520,y:160, expected:7}, {x:570,y:200, expected:6} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-ross2', name: 'Hereford — Ross (via A49)', location: 'Herefordshire', freq: 55, expected: 16, stops: [ {x:460,y:280, expected:16}, {x:620,y:360, expected:16} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'leominster-ledbury', name: 'Leominster — Ledbury', location: 'Herefordshire', freq: 130, expected: 6, stops: [ {x:380,y:160, expected:6}, {x:570,y:200, expected:6} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-ross-express', name: 'Hereford — Ross Express', location: 'Herefordshire', freq: 30, expected: 25, stops: [ {x:460,y:280, expected:25}, {x:620,y:360, expected:20} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-leb', name: 'Hereford — Leintwardine', location: 'Herefordshire', freq: 200, expected: 3, stops: [ {x:460,y:280, expected:3}, {x:180,y:220, expected:3} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'ross-kingston', name: 'Ross — Kington', location: 'Herefordshire', freq: 220, expected: 3, stops: [ {x:620,y:360, expected:3}, {x:240,y:120, expected:3} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-burghill', name: 'Hereford — Burghill', location: 'Herefordshire', freq: 80, expected: 5, stops: [ {x:460,y:280, expected:5}, {x:420,y:300, expected:4} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-morton', name: 'Hereford — Mortimer', location: 'Herefordshire', freq: 120, expected: 4, stops: [ {x:460,y:280, expected:4}, {x:500,y:100, expected:3} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'bromyard-leintwardine', name: 'Bromyard — Leintwardine', location: 'Herefordshire', freq: 240, expected: 2, stops: [ {x:520,y:160, expected:2}, {x:180,y:220, expected:2} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'ledbury-powys', name: 'Ledbury — Powys (cross-border)', location: 'Herefordshire', freq: 300, expected: 2, stops: [ {x:570,y:200, expected:2}, {x:760,y:80, expected:2} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-burford', name: 'Hereford — Burford', location: 'Herefordshire', freq: 150, expected: 3, stops: [ {x:460,y:280, expected:3}, {x:340,y:320, expected:2} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'leominster-ross', name: 'Leominster — Ross', location: 'Herefordshire', freq: 180, expected: 5, stops: [ {x:380,y:160, expected:5}, {x:620,y:360, expected:5} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'pembridge-kington', name: 'Pembridge — Kington', location: 'Herefordshire', freq: 160, expected: 4, stops: [ {x:300,y:240, expected:4}, {x:240,y:120, expected:4} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-wellington', name: 'Hereford — Wellington', location: 'Herefordshire', freq: 260, expected: 2, stops: [ {x:460,y:280, expected:2}, {x:820,y:280, expected:1} ], assignedBusId: null, lastPassengers: 0 },
-  { id: 'hereford-townloop', name: 'Hereford Town Loop', location: 'Herefordshire', freq: 20, expected: 30, stops: [ {x:460,y:280, expected:30}, {x:480,y:260, expected:25}, {x:440,y:260, expected:20} ], assignedBusId: null, lastPassengers: 0 }
+  { id: 'hereford-leominster', name: 'Hereford — Leominster', location: 'Herefordshire', freq: 60, expected: 18, stops: [ {x:460,y:280, expected:18}, {x:380,y:160, expected:12} ] },
+  { id: 'hereford-ross', name: 'Hereford — Ross-on-Wye', location: 'Herefordshire', freq: 45, expected: 22, stops: [ {x:460,y:280, expected:22}, {x:620,y:360, expected:18} ] },
+  { id: 'hereford-ledbury', name: 'Hereford — Ledbury', location: 'Herefordshire', freq: 30, expected: 20, stops: [ {x:460,y:280, expected:20}, {x:570,y:200, expected:15} ] },
+  { id: 'bromyard-kingston', name: 'Bromyard — Kington', location: 'Herefordshire', freq: 120, expected: 10, stops: [ {x:520,y:160, expected:10}, {x:240,y:120, expected:8} ] },
+  { id: 'leominster-kington', name: 'Leominster — Kington', location: 'Herefordshire', freq: 90, expected: 9, stops: [ {x:380,y:160, expected:9}, {x:240,y:120, expected:7} ] },
+  { id: 'ledbury-ross', name: 'Ledbury — Ross-on-Wye', location: 'Herefordshire', freq: 50, expected: 14, stops: [ {x:570,y:200, expected:14}, {x:620,y:360, expected:12} ] },
+  { id: 'hereford-hay', name: 'Hereford — Hay-on-Wye', location: 'Herefordshire', freq: 180, expected: 8, stops: [ {x:460,y:280, expected:8}, {x:700,y:120, expected:6} ] },
+  { id: 'hereford-weobley', name: 'Hereford — Weobley', location: 'Herefordshire', freq: 120, expected: 6, stops: [ {x:460,y:280, expected:6}, {x:420,y:220, expected:5} ] },
+  { id: 'hereford-pembridge', name: 'Hereford — Pembridge', location: 'Herefordshire', freq: 100, expected: 7, stops: [ {x:460,y:280, expected:7}, {x:300,y:240, expected:5} ] },
+  { id: 'hereford-bromyard', name: 'Hereford — Bromyard', location: 'Herefordshire', freq: 40, expected: 12, stops: [ {x:460,y:280, expected:12}, {x:520,y:160, expected:10} ] },
+  { id: 'ross-ledbury', name: 'Ross-on-Wye — Ledbury', location: 'Herefordshire', freq: 70, expected: 9, stops: [ {x:620,y:360, expected:9}, {x:570,y:200, expected:8} ] },
+  { id: 'ross-hay', name: 'Ross-on-Wye — Hay-on-Wye', location: 'Herefordshire', freq: 160, expected: 6, stops: [ {x:620,y:360, expected:6}, {x:700,y:120, expected:5} ] },
+  { id: 'ledbury-pembridge', name: 'Ledbury — Pembridge', location: 'Herefordshire', freq: 110, expected: 5, stops: [ {x:570,y:200, expected:5}, {x:300,y:240, expected:4} ] },
+  { id: 'kingsland-kington', name: 'Kingsland — Kington', location: 'Herefordshire', freq: 140, expected: 4, stops: [ {x:260,y:140, expected:4}, {x:240,y:120, expected:4} ] },
+  { id: 'bromyard-ledbury', name: 'Bromyard — Ledbury', location: 'Herefordshire', freq: 95, expected: 7, stops: [ {x:520,y:160, expected:7}, {x:570,y:200, expected:6} ] },
+  { id: 'hereford-ross2', name: 'Hereford — Ross (via A49)', location: 'Herefordshire', freq: 55, expected: 16, stops: [ {x:460,y:280, expected:16}, {x:620,y:360, expected:16} ] },
+  { id: 'leominster-ledbury', name: 'Leominster — Ledbury', location: 'Herefordshire', freq: 130, expected: 6, stops: [ {x:380,y:160, expected:6}, {x:570,y:200, expected:6} ] },
+  { id: 'hereford-ross-express', name: 'Hereford — Ross Express', location: 'Herefordshire', freq: 30, expected: 25, stops: [ {x:460,y:280, expected:25}, {x:620,y:360, expected:20} ] },
+  { id: 'hereford-leb', name: 'Hereford — Leintwardine', location: 'Herefordshire', freq: 200, expected: 3, stops: [ {x:460,y:280, expected:3}, {x:180,y:220, expected:3} ] },
+  { id: 'ross-kingston', name: 'Ross — Kington', location: 'Herefordshire', freq: 220, expected: 3, stops: [ {x:620,y:360, expected:3}, {x:240,y:120, expected:3} ] },
+  { id: 'hereford-burghill', name: 'Hereford — Burghill', location: 'Herefordshire', freq: 80, expected: 5, stops: [ {x:460,y:280, expected:5}, {x:420,y:300, expected:4} ] },
+  { id: 'hereford-morton', name: 'Hereford — Mortimer', location: 'Herefordshire', freq: 120, expected: 4, stops: [ {x:460,y:280, expected:4}, {x:500,y:100, expected:3} ] },
+  { id: 'bromyard-leintwardine', name: 'Bromyard — Leintwardine', location: 'Herefordshire', freq: 240, expected: 2, stops: [ {x:520,y:160, expected:2}, {x:180,y:220, expected:2} ] },
+  { id: 'ledbury-powys', name: 'Ledbury — Powys (cross-border)', location: 'Herefordshire', freq: 300, expected: 2, stops: [ {x:570,y:200, expected:2}, {x:760,y:80, expected:2} ] },
+  { id: 'hereford-burford', name: 'Hereford — Burford', location: 'Herefordshire', freq: 150, expected: 3, stops: [ {x:460,y:280, expected:3}, {x:340,y:320, expected:2} ] },
+  { id: 'leominster-ross', name: 'Leominster — Ross', location: 'Herefordshire', freq: 180, expected: 5, stops: [ {x:380,y:160, expected:5}, {x:620,y:360, expected:5} ] },
+  { id: 'pembridge-kington', name: 'Pembridge — Kington', location: 'Herefordshire', freq: 160, expected: 4, stops: [ {x:300,y:240, expected:4}, {x:240,y:120, expected:4} ] },
+  { id: 'hereford-wellington', name: 'Hereford — Wellington', location: 'Herefordshire', freq: 260, expected: 2, stops: [ {x:460,y:280, expected:2}, {x:820,y:280, expected:1} ] },
+  { id: 'hereford-townloop', name: 'Hereford Town Loop', location: 'Herefordshire', freq: 20, expected: 30, stops: [ {x:460,y:280, expected:30}, {x:480,y:260, expected:25}, {x:440,y:260, expected:20} ] }
 ];
 
 let state = { day:1, balance:START_BALANCE, drivers:0, buses:[], routes:[], busOnMap:{x:150,y:150,angle:0,speed:0}, drawingRoute:false, currentEditedStops:[], log:[] };
@@ -125,6 +127,9 @@ let state = { day:1, balance:START_BALANCE, drivers:0, buses:[], routes:[], busO
 const el = id=>document.getElementById(id);
 function money(n){return '£'+Number(n).toLocaleString();}
 function idNow(p){return p+Date.now().toString(36);} 
+
+/* Auto-run state */
+let autoRun = null; // { routeId, stopIndex, looping }
 
 /* Save/Load/Export/Import */
 function saveStateLocal(){ try{ localStorage.setItem('stancoach_v1', JSON.stringify(state)); addLog('Saved locally'); }catch(e){addLog('Save failed');} }
@@ -142,15 +147,15 @@ function drawStops(s){ s.forEach((p,i)=>{ ctx.fillStyle='#ff7043'; ctx.beginPath
 function drawBus(){ const b=state.busOnMap; ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.angle); ctx.fillStyle='#2b7cff'; ctx.fillRect(-18,-10,36,20); ctx.fillStyle='#fff'; ctx.fillRect(-10,-6,20,12); ctx.restore(); }
 function render(){ drawGrid(); state.routes.forEach(r=>{ if(r.stops && r.stops.length){ ctx.strokeStyle='rgba(20,120,20,0.6)'; ctx.lineWidth=2; ctx.beginPath(); r.stops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke(); drawStops(r.stops); } }); if(state.drawingRoute && state.currentEditedStops.length){ ctx.strokeStyle='rgba(200,80,0,0.8)'; ctx.lineWidth=2; ctx.beginPath(); state.currentEditedStops.forEach((s,i)=>{ if(i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); }); ctx.stroke(); drawStops(state.currentEditedStops); } drawBus(); }
 
-// Prevent adding stops via clicks — editor disabled
-canvas.addEventListener('pointerdown', (e)=>{ const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(canvas.width/rect.width); const y=(e.clientY-rect.top)*(canvas.height/rect.height); // only allow placing the bus, not adding stops
-  state.busOnMap.x=x; state.busOnMap.y=y; addLog('Placed bus'); saveStateLocal(); render(); });
+// Pointer click places bus (editor disabled)
+canvas.addEventListener('pointerdown', (e)=>{ const rect=canvas.getBoundingClientRect(); const x=(e.clientX-rect.left)*(canvas.width/rect.width); const y=(e.clientY-rect.top)*(canvas.height/rect.height); state.busOnMap.x=x; state.busOnMap.y=y; addLog('Placed bus'); saveStateLocal(); render(); });
 
-/* Route assign/drive helpers */
-function loadPresetRoutes(force=false){ if(!force && state.routes && state.routes.length>0) return; state.routes = []; PRESET_ROUTES.forEach(r=>{ const nid = idNow('route'); state.routes.push({ id: nid, name: r.name, location: r.location, freq: r.freq, expected: r.expected, stops: r.stops.map(s=>({ x: s.x, y: s.y, expected: s.expected })), assignedBusId: null, lastPassengers: 0 }); }); addLog('Loaded preset Herefordshire routes'); saveStateLocal(); }
+/* Route helpers */
+function loadPresetRoutes(force=false){ if(!force && state.routes && state.routes.length>0) return; state.routes = []; PRESET_ROUTES.forEach(r=>{ const nid = idNow('route'); state.routes.push({ id: nid, name: r.name, location: r.location, freq: r.freq, expected: r.expected, stops: r.stops.map(s=>({ x: s.x, y: s.y, expected: s.expected, _visitedToday:false })), assignedBusId: null, lastPassengers: 0 }); }); addLog('Loaded preset Herefordshire routes'); saveStateLocal(); }
 
-function updateUI(){ el('balance').textContent=money(Math.round(state.balance)); el('day').textContent=state.day; el('drivers').textContent=state.drivers; el('buses-count').textContent=state.buses.length; const routesTable = document.getElementById('routes-table').querySelector('tbody'); routesTable.innerHTML=''; state.routes.forEach(r=>{ const assigned = state.buses.find(b=>b.id===r.assignedBusId); const tr=document.createElement('tr'); const driveBtn=`<button class="drive-btn" data-id="${r.id}">Drive</button>`; tr.innerHTML = `<td>${r.name}</td><td>${r.location || ''}</td><td>${r.freq}m</td><td>${r.expected}</td><td>${assigned?assigned.name:'(none)'}</td><td>${r.lastPassengers||'-'}</td><td>${driveBtn}</td>`; routesTable.appendChild(tr); });
+function updateUI(){ el('balance').textContent=money(Math.round(state.balance)); el('day').textContent=state.day; el('drivers').textContent=state.drivers; el('buses-count').textContent=state.buses.length; const routesTable = document.getElementById('routes-table').querySelector('tbody'); routesTable.innerHTML=''; state.routes.forEach((r,idx)=>{ const assigned = state.buses.find(b=>b.id===r.assignedBusId); const tr=document.createElement('tr'); tr.innerHTML = `<td>${r.name}</td><td>${r.location || ''}</td><td>${r.freq}m</td><td>${r.expected||'-'}</td><td>${assigned?assigned.name:'(none)'}</td><td>${r.lastPassengers||'-'}</td><td><button class="drive-btn" data-id="${r.id}">Manual</button> <button class="autorun-btn" data-id="${r.id}">Auto</button></td>`; routesTable.appendChild(tr); });
   document.querySelectorAll('.drive-btn').forEach(b=>{ b.onclick = e=> openDrivePanel(e.target.dataset.id); });
+  document.querySelectorAll('.autorun-btn').forEach(b=>{ b.onclick = e=> startAutoRun(e.target.dataset.id); });
   const buy=el('buy-bus-type'); buy.innerHTML=''; BUS_MODELS.forEach(m=>{ const o=document.createElement('option'); o.value=m.id; o.textContent=`${m.label} — £${m.price}`; buy.appendChild(o); }); }
 
 el('load-presets').addEventListener('click', ()=>{ loadPresetRoutes(true); updateUI(); render(); addLog('Preset routes reloaded'); });
@@ -159,16 +164,69 @@ el('assign-bus').addEventListener('click', ()=>{ if(!state.routes.length){ alert
 
 /* Driving physics */
 let keys={up:false,down:false,left:false,right:false}; const MAX=2.0,ACC=0.06,FR=0.98;
-function updatePhysics(){ const b=state.busOnMap; if(keys.up) b.speed=Math.min(MAX,b.speed+ACC); if(keys.down) b.speed=Math.max(-MAX/2,b.speed-ACC); if(!keys.up&&!keys.down){ b.speed*=FR; if(Math.abs(b.speed)<0.02) b.speed=0;} if(keys.left) b.angle-=0.04; if(keys.right) b.angle+=0.04; b.x+=Math.cos(b.angle)*b.speed*1.8; b.y+=Math.sin(b.angle)*b.speed*1.8; b.x=Math.max(10,Math.min(W-10,b.x)); b.y=Math.max(10,Math.min(H-10,b.y)); checkStopProximity(); }
+function normalizeAngle(a){ while(a>Math.PI) a-=Math.PI*2; while(a<-Math.PI) a+=Math.PI*2; return a; }
+
+function updatePhysics(){ const b=state.busOnMap;
+  if(autoRun && autoRun.active){ // simple steering towards current stop
+    const route = state.routes.find(r=>r.id===autoRun.routeId);
+    if(!route){ stopAutoRun(); return; }
+    const target = route.stops[autoRun.stopIndex];
+    const dx = target.x - b.x; const dy = target.y - b.y; const desired = Math.atan2(dy,dx);
+    let diff = normalizeAngle(desired - b.angle);
+    const turn = 0.04; if(diff > turn) b.angle += turn; else if(diff < -turn) b.angle -= turn; else b.angle = desired;
+    // speed control: slow when close
+    const dist = Math.hypot(dx,dy);
+    const desiredSpeed = dist < 30 ? Math.max(0.4, dist/30 * 1.2) : 1.6;
+    if(b.speed < desiredSpeed) b.speed = Math.min(desiredSpeed, b.speed + ACC*1.6); else b.speed = b.speed * FR;
+    // move
+    b.x += Math.cos(b.angle) * b.speed * 1.8; b.y += Math.sin(b.angle) * b.speed * 1.8;
+    // check arrival
+    if(dist < 18){ // arrived
+      // mark visited and pick passengers
+      if(!target._visitedToday){ const totalPass = Math.min(Math.round(target.expected*(0.5+Math.random()*0.8)), getBusCapacity()); const singleP=Number(el('t-single').value)||70; const dayP=Number(el('t-day').value)||20; const weekP=Number(el('t-week').value)||10; let single=0,day=0,week=0; for(let i=0;i<totalPass;i++){ const r=Math.random()*100; if(r<singleP) single++; else if(r<singleP+dayP) day++; else week++; } const income = single*FARE_SINGLE + day*FARE_DAY + week*FARE_WEEK; state.balance += income; el('balance').textContent = money(Math.round(state.balance)); addLog(`Auto-picked ${totalPass} (S:${single} D:${day} W:${week}) +${money(income)}`); target._visitedToday = true; }
+      // advance to next stop
+      autoRun.stopIndex++;
+      if(autoRun.stopIndex >= route.stops.length){ if(autoRun.looping){ autoRun.stopIndex = 0; route.stops.forEach(s=>s._visitedToday=false); } else { addLog('Auto-run completed route: '+route.name); stopAutoRun(); } }
+    }
+    // clamp to bounds
+    b.x=Math.max(10,Math.min(W-10,b.x)); b.y=Math.max(10,Math.min(H-10,b.y));
+    return; // skip manual keys
+  }
+
+  // manual controls
+  if(keys.up) b.speed=Math.min(MAX,b.speed+ACC); if(keys.down) b.speed=Math.max(-MAX/2,b.speed-ACC); if(!keys.up&&!keys.down){ b.speed*=FR; if(Math.abs(b.speed)<0.02) b.speed=0;} if(keys.left) b.angle-=0.04; if(keys.right) b.angle+=0.04; b.x+=Math.cos(b.angle)*b.speed*1.8; b.y+=Math.sin(b.angle)*b.speed*1.8; b.x=Math.max(10,Math.min(W-10,b.x)); b.y=Math.max(10,Math.min(H-10,b.y)); checkStopProximity(); }
+
 function checkStopProximity(){ const b=state.busOnMap; state.routes.forEach(route=>{ route.stops.forEach((s,idx)=>{ const dx=b.x-s.x,dy=b.y-s.y,d=Math.sqrt(dx*dx+dy*dy); if(d<18){ if(!s._visitedToday){ const totalPass = Math.min(Math.round(s.expected*(0.5+Math.random()*0.8)), getBusCapacity()); const singleP=Number(el('t-single').value)||70; const dayP=Number(el('t-day').value)||20; const weekP=Number(el('t-week').value)||10; let single=0,day=0,week=0; for(let i=0;i<totalPass;i++){ const r=Math.random()*100; if(r<singleP) single++; else if(r<singleP+dayP) day++; else week++; } const income = single*FARE_SINGLE + day*FARE_DAY + week*FARE_WEEK; state.balance += income; s._visitedToday=true; addLog(`Picked ${totalPass} (S:${single} D:${day} W:${week}) +${money(income)}`); saveStateLocal(); updateUI(); } } }); }); }
+
 function getBusCapacity(){ if(!state.buses.length) return 40; const model=BUS_MODELS.find(m=>m.id===state.buses[0].modelId); return model?model.capacity:40; }
 let physTimer=null; function startPhysics(){ if(physTimer) return; physTimer=setInterval(()=>{ updatePhysics(); render(); },30);} function stopPhysics(){ if(physTimer){ clearInterval(physTimer); physTimer=null; } }
 window.addEventListener('keydown',(e)=>{ if(e.key==='ArrowUp'||e.key==='w') keys.up=true; if(e.key==='ArrowDown'||e.key==='s') keys.down=true; if(e.key==='ArrowLeft'||e.key==='a') keys.left=true; if(e.key==='ArrowRight'||e.key==='d') keys.right=true; }); window.addEventListener('keyup',(e)=>{ if(e.key==='ArrowUp'||e.key==='w') keys.up=false; if(e.key==='ArrowDown'||e.key==='s') keys.down=false; if(e.key==='ArrowLeft'||e.key==='a') keys.left=false; if(e.key==='ArrowRight'||e.key==='d') keys.right=false; });
-el('start-drive').addEventListener('click', ()=>{ addLog('Enter drive'); startPhysics(); }); el('stop-drive').addEventListener('click', ()=>{ addLog('Exit drive'); stopPhysics(); });
+
+el('start-drive').addEventListener('click', ()=>{ addLog('Enter drive'); // ensure auto-run is stopped when starting manual drive
+  stopAutoRun(); startPhysics(); }); el('stop-drive').addEventListener('click', ()=>{ addLog('Exit drive'); stopPhysics(); });
 
 /* Purchases UI */
 el('buy-bus').addEventListener('click', ()=>{ const sel=el('buy-bus-type').value; const model=BUS_MODELS.find(m=>m.id===sel); if(!model) return; const cost=model.price; const total=cost+MANAGEMENT_ACTION_COST; if(!confirm(`Buy ${model.label} for £${cost}? Management £${MANAGEMENT_ACTION_COST}. Total £${total}. Confirm?`)) return; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=cost; state.balance-=MANAGEMENT_ACTION_COST; const id=idNow('bus'); const name=`${model.id}-${state.buses.length+1}`; state.buses.push({id,modelId:model.id,name}); addLog('Bought '+name+' for '+money(cost)); saveStateLocal(); updateUI(); render(); });
 el('hire-driver').addEventListener('click', ()=>{ const total=MANAGEMENT_ACTION_COST+STAFF_WAGE_PER_DAY; if(state.balance<total){ alert('Not enough funds'); return;} state.balance-=MANAGEMENT_ACTION_COST; state.drivers+=1; addLog('Hired driver'); saveStateLocal(); updateUI(); });
+
+/* Auto-run control functions */
+function startAutoRun(routeId, opts={loop:false}){
+  const route = state.routes.find(r=>r.id===routeId);
+  if(!route){ alert('Route not found'); return; }
+  autoRun = { routeId, stopIndex:0, looping:!!opts.loop, active:true };
+  // reset visited flags
+  route.stops.forEach(s=>s._visitedToday=false);
+  addLog('Auto-run started: '+route.name+(autoRun.looping? ' (looping)':''));
+  startPhysics();
+}
+function stopAutoRun(){ if(autoRun){ addLog('Auto-run stopped'); autoRun=null; } }
+
+// UI hook for start-auto button: prompt for route number
+el('start-auto').addEventListener('click', ()=>{
+  if(!state.routes.length){ alert('No routes loaded'); return; }
+  const routeNames = state.routes.map((r,i)=>`${i+1}: ${r.name}`).join('\n'); const sel = prompt('Start Auto-Run: pick route by number:\n'+routeNames+'\n(append L to loop, e.g. 1L)'); if(!sel) return; const loop = /L$/i.test(sel.trim()); const num = parseInt(sel,10); if(isNaN(num)||num<1||num>state.routes.length){ alert('Invalid route'); return;} const r = state.routes[num-1]; startAutoRun(r.id,{loop});
+});
+el('stop-auto').addEventListener('click', ()=>{ stopAutoRun(); });
 
 /* Drive panel simulation (for saved routes) */
 let currentDrive=null; function openDrivePanel(routeId){ const route = state.routes.find(r=>r.id===routeId); if(!route){ alert('Route not found'); return;} alert(`Selected ${route.name}. Place your bus near a stop and enter Drive Mode to collect passengers.`); }
